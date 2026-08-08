@@ -1,0 +1,516 @@
+// Számla- és előfizetés-kezelő — adatmodell
+// Fejlesztés alatt SQLite (ezért az enum-jellegű mezők String-ként, a tömbök/JSON-ok
+// JSON-kódolt String-ként tárolódnak; Postgres-re váltásnál natív enum/array-re cserélhetők).
+// Minden összeg egész, a deviza legkisebb egységében (fillér/cent) tárolva.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id              String   @id @default(uuid())
+  name            String
+  taxNumber       String?
+  baseCurrency    String   @default("HUF") // USD | EUR | HUF
+  fiscalYearStart Int      @default(1) // hónap (1 = január)
+  timezone        String   @default("Europe/Budapest")
+  logoUrl         String?
+  inboundEmailToken String? // szamla-{token}@app.hu
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  users             User[]
+  partners          Partner[]
+  invoices          Invoice[]
+  subscriptions     Subscription[]
+  purchases         Purchase[]
+  bankAccounts      BankAccount[]
+  bankStatements    BankStatement[]
+  payments          Payment[]
+  categories        Category[]
+  attachments       Attachment[]
+  reminders         Reminder[]
+  savedFilters      SavedFilter[]
+  auditLogs         AuditLog[]
+  matchingRules     MatchingRule[]
+}
+
+model User {
+  id                String   @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  email             String   @unique
+  name              String
+  passwordHash      String
+  role              String   @default("OWNER") // OWNER | ADMIN | ACCOUNTANT | VIEWER
+  locale            String   @default("hu")
+  notificationPrefs String   @default("{}") // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  savedFilters SavedFilter[]
+  auditLogs    AuditLog[]
+}
+
+model Partner {
+  id                     String   @id @default(uuid())
+  organizationId         String
+  organization           Organization @relation(fields: [organizationId], references: [id])
+  name                   String
+  displayName            String?
+  type                   String   @default("SUPPLIER") // SUPPLIER | CUSTOMER | BOTH
+  taxNumber              String?
+  euVatNumber            String?
+  registrationNumber     String?
+  country                String?  // ISO-2
+  address                String?
+  city                   String?
+  postalCode             String?
+  email                  String?
+  phone                  String?
+  website                String?
+  defaultCurrency        String?
+  defaultPaymentTermDays Int?
+  defaultCategoryId      String?
+  iban                   String?
+  bankAccountNumber      String?
+  swift                  String?
+  logoUrl                String?
+  color                  String?  // pasztell paletta kulcs: red|orange|yellow|green|blue|purple|pink|gray
+  tags                   String   @default("[]") // JSON string[]
+  notes                  String?
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  deletedAt              DateTime?
+
+  aliases          PartnerAlias[]
+  invoices         Invoice[]
+  subscriptions    Subscription[]
+  purchases        Purchase[]
+  payments         Payment[]
+  bankTransactions BankTransaction[]
+
+  @@index([organizationId, name])
+}
+
+model PartnerAlias {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  alias     String
+
+  @@index([alias])
+}
+
+model Invoice {
+  id               String    @id @default(uuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  partnerId        String?
+  partner          Partner?  @relation(fields: [partnerId], references: [id])
+  direction        String    @default("INCOMING") // INCOMING | OUTGOING
+  invoiceNumber    String
+  issueDate        DateTime  // kelt
+  fulfillmentDate  DateTime? // teljesítés
+  dueDate          DateTime  // fizetési határidő
+  currency         String    // USD | EUR | HUF
+  netAmount        Int
+  vatRate          String    @default("27") // 27|18|5|0|AAM|TAM|FAD|EU|EUE|HO
+  vatAmount        Int
+  grossAmount      Int
+  exchangeRate     Float     @default(1)
+  baseAmount       Int       // alapdevizára átszámolva, minor unit
+  exchangeRateDate DateTime?
+  status           String    @default("DRAFT") // DRAFT|AWAITING_APPROVAL|APPROVED|PARTIALLY_PAID|PAID|OVERDUE|CANCELLED|DISPUTED
+  paymentMethod    String    @default("TRANSFER") // TRANSFER|CARD|CASH|DIRECT_DEBIT|OTHER
+  categoryId       String?
+  category         Category? @relation(fields: [categoryId], references: [id])
+  costCenterId     String?
+  projectId        String?
+  subscriptionId   String?
+  subscription     Subscription? @relation(fields: [subscriptionId], references: [id])
+  purchaseId       String?
+  description      String?
+  tags             String    @default("[]")
+  sourceType       String    @default("MANUAL") // MANUAL|UPLOAD|EMAIL|API
+  ocrConfidence    Float?
+  notes            String?
+  // NAV Online Számla felkészítés
+  navInvoiceHash   String?
+  navTransactionId String?
+  navStatus        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  lineItems        InvoiceLineItem[]
+  payments         Payment[]
+  occurrences      SubscriptionOccurrence[]
+  bankTransactions BankTransaction[]
+  attachments      Attachment[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([organizationId, partnerId, invoiceNumber])
+}
+
+model InvoiceLineItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float   @default(1)
+  unit        String? // db, óra, hó...
+  unitPrice   Int
+  netAmount   Int
+  vatRate     String  @default("27")
+  vatAmount   Int
+  grossAmount Int
+  categoryId  String?
+}
+
+model Subscription {
+  id                 String    @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  partnerId          String
+  partner            Partner   @relation(fields: [partnerId], references: [id])
+  name               String
+  description        String?
+  currency           String
+  amount             Int       // bruttó / ciklus, minor unit
+  vatRate            String    @default("27")
+  billingCycle       String    @default("MONTHLY") // MONTHLY|QUARTERLY|SEMI_ANNUAL|ANNUAL|CUSTOM
+  customIntervalDays Int?
+  startDate          DateTime
+  nextBillingDate    DateTime
+  endDate            DateTime?
+  cancellationDeadline DateTime?
+  noticePeriodDays   Int?
+  autoRenew          Boolean   @default(true)
+  status             String    @default("ACTIVE") // ACTIVE|PAUSED|CANCELLED|EXPIRED|TRIAL
+  trialEndsAt        DateTime?
+  paymentMethod      String    @default("CARD")
+  paymentSourceLast4 String?
+  categoryId         String?
+  category           Category? @relation(fields: [categoryId], references: [id])
+  seats              Int?
+  pricePerSeat       Int?
+  reminderDaysBefore String    @default("[14,3,1]") // JSON int[]
+  autoCreateInvoice  Boolean   @default(false)
+  url                String?
+  tags               String    @default("[]")
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  occurrences SubscriptionOccurrence[]
+  invoices    Invoice[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, nextBillingDate])
+}
+
+model SubscriptionOccurrence {
+  id                String   @id @default(uuid())
+  subscriptionId    String
+  subscription      Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  dueDate           DateTime
+  expectedAmount    Int
+  currency          String
+  status            String   @default("UPCOMING") // UPCOMING|BILLED|PAID|SKIPPED|FAILED
+  invoiceId         String?
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  bankTransactionId String?
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  actualAmount      Int?
+  varianceAmount    Int?     // eltérés a vártól
+  remindersSent     String   @default("[]") // JSON
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([subscriptionId, dueDate])
+  @@index([dueDate, status])
+}
+
+model Purchase {
+  id                  String    @id @default(uuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  partnerId           String?
+  partner             Partner?  @relation(fields: [partnerId], references: [id])
+  name                String
+  purchaseDate        DateTime
+  currency            String
+  netAmount           Int
+  vatAmount           Int
+  grossAmount         Int
+  exchangeRate        Float     @default(1)
+  baseAmount          Int
+  categoryId          String?
+  category            Category? @relation(fields: [categoryId], references: [id])
+  paymentMethod       String    @default("CARD")
+  warrantyUntil       DateTime?
+  isAsset             Boolean   @default(false)
+  assetLifetimeMonths Int?
+  invoiceId           String?
+  bankTransactionId   String?
+  tags                String    @default("[]")
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime?
+
+  attachments Attachment[]
+
+  @@index([organizationId, purchaseDate])
+}
+
+model BankAccount {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  bankName       String?
+  accountNumber  String?
+  iban           String?
+  swift          String?
+  currency       String
+  openingBalance Int      @default(0)
+  currentBalance Int      @default(0)
+  isActive       Boolean  @default(true)
+  color          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  statements   BankStatement[]
+  transactions BankTransaction[]
+}
+
+model BankStatement {
+  id               String   @id @default(uuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  bankAccountId    String
+  bankAccount      BankAccount @relation(fields: [bankAccountId], references: [id])
+  statementNumber  String?
+  periodStart      DateTime
+  periodEnd        DateTime
+  openingBalance   Int
+  closingBalance   Int
+  currency         String
+  fileId           String?
+  importedAt       DateTime @default(now())
+  importedBy       String?
+  transactionCount Int      @default(0)
+  matchedCount     Int      @default(0)
+  status           String   @default("NEEDS_REVIEW") // IMPORTING|NEEDS_REVIEW|RECONCILED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  transactions BankTransaction[]
+}
+
+model BankTransaction {
+  id                             String   @id @default(uuid())
+  bankStatementId                String
+  bankStatement                  BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  bankAccountId                  String
+  bankAccount                    BankAccount @relation(fields: [bankAccountId], references: [id])
+  bookingDate                    DateTime
+  valueDate                      DateTime?
+  amount                         Int      // előjeles: negatív = terhelés
+  currency                       String
+  counterpartyName               String?
+  counterpartyAccount            String?
+  counterpartyIban               String?
+  reference                      String?  // közlemény
+  endToEndId                     String?
+  transactionType                String?
+  balanceAfter                   Int?
+  matchStatus                    String   @default("UNMATCHED") // UNMATCHED|AUTO_MATCHED|MANUALLY_MATCHED|IGNORED|SPLIT
+  matchConfidence                Float?
+  matchedInvoiceId               String?
+  matchedInvoice                 Invoice? @relation(fields: [matchedInvoiceId], references: [id])
+  matchedSubscriptionOccurrenceId String?
+  matchedPurchaseId              String?
+  partnerId                      String?
+  partner                        Partner? @relation(fields: [partnerId], references: [id])
+  categoryId                     String?
+  rawData                        String   @default("{}") // JSON
+  notes                          String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  occurrences SubscriptionOccurrence[]
+  payments    Payment[]
+
+  @@index([bankStatementId])
+  @@index([matchStatus])
+  @@index([endToEndId])
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  invoiceId         String?
+  invoice           Invoice? @relation(fields: [invoiceId], references: [id])
+  partnerId         String?
+  partner           Partner? @relation(fields: [partnerId], references: [id])
+  paymentDate       DateTime
+  amount            Int
+  currency          String
+  exchangeRate      Float    @default(1)
+  baseAmount        Int
+  method            String   @default("TRANSFER")
+  bankTransactionId String?
+  bankTransaction   BankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  bankAccountId     String?
+  reference         String?
+  isPartial         Boolean  @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  @@index([organizationId, paymentDate])
+}
+
+model Category {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  parentId       String?
+  parent         Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children       Category[] @relation("CategoryTree")
+  color          String?
+  icon           String?
+  type           String   @default("EXPENSE") // EXPENSE | INCOME
+  defaultVatRate String?
+  monthlyBudget  Int?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  invoices      Invoice[]
+  subscriptions Subscription[]
+  purchases     Purchase[]
+}
+
+model ExchangeRate {
+  id             String   @id @default(uuid())
+  date           DateTime
+  baseCurrency   String
+  targetCurrency String
+  rate           Float
+  source         String   @default("MNB") // MNB | ECB | MANUAL
+  createdAt      DateTime @default(now())
+
+  @@unique([date, baseCurrency, targetCurrency])
+  @@index([targetCurrency, date])
+}
+
+model Attachment {
+  id           String   @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  fileName     String
+  mimeType     String
+  fileSize     Int
+  storageUrl   String
+  thumbnailUrl String?
+  uploadedBy   String?
+  entityType   String?  // INVOICE | PURCHASE | BANK_STATEMENT | INBOX
+  entityId     String?
+  ocrText      String?
+  ocrStatus    String   @default("PENDING") // PENDING|PROCESSING|DONE|FAILED
+  ocrFields    String   @default("{}") // JSON: kinyert mezők + confidence
+  inboxStatus  String?  // NEEDS_REVIEW | APPROVED | REJECTED (Beérkező)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  invoiceId  String?
+  invoice    Invoice?  @relation(fields: [invoiceId], references: [id])
+  purchaseId String?
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+}
+
+model Reminder {
+  id           String   @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  type         String   // SUBSCRIPTION_RENEWAL|INVOICE_DUE|INVOICE_OVERDUE|CANCELLATION_DEADLINE|TRIAL_ENDING|BUDGET_EXCEEDED|PRICE_INCREASE|WARRANTY_EXPIRING
+  entityType   String
+  entityId     String
+  triggerDate  DateTime
+  channel      String   @default("BOTH") // IN_APP | EMAIL | BOTH
+  status       String   @default("SCHEDULED") // SCHEDULED|SENT|DISMISSED|SNOOZED
+  snoozedUntil DateTime?
+  sentAt       DateTime?
+  message      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([organizationId, triggerDate, status])
+}
+
+model SavedFilter {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  name           String
+  entityType     String   // invoices|subscriptions|purchases|bank-transactions|partners|payments
+  filterJson     String   // a szűrőállapot URL-lel azonos JSON kódolása
+  isShared       Boolean  @default(false)
+  isPinned       Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MatchingRule {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  referenceContains String // ha a közlemény tartalmazza...
+  partnerId      String?
+  categoryId     String?
+  subscriptionId String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  action         String
+  entityType     String
+  entityId       String
+  changes        String   @default("{}") // JSON diff
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+}
