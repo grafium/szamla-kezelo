@@ -53,6 +53,13 @@ function grossToParts(vatRate: string, gross: number) {
 
 // ---------- main ----------
 async function main() {
+  // Idempotencia: ha már van adat (pl. korábbi Vercel-build seedelt), nem fut újra.
+  const existing = await prisma.organization.count();
+  if (existing > 0) {
+    console.log("A seed kihagyva — az adatbázis már tartalmaz adatokat.");
+    return;
+  }
+
   console.log("Seedelés indul...", NOW.toISOString());
 
   // 1. Organization

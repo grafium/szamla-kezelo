@@ -4,20 +4,44 @@ Teljes körű pénzügyi nyilvántartó kisvállalkozásoknak: beérkező száml
 kivonatok, egyszeri vásárlások és ismétlődő előfizetések kezelése három
 devizában (HUF / EUR / USD), Notion-stílusú felülettel, teljes egészében magyarul.
 
-## Gyors indítás
+## Deploy Vercel-re (publikus link)
+
+A repó elő van készítve: a build maga hozza létre a sémát és tölti be a demó
+adatokat (a seed idempotens — meglévő adatot nem ír felül), a napi cronok pedig
+a `vercel.json`-ból jönnek.
+
+1. **Adatbázis:** hozz létre egy ingyenes Postgres-t a [neon.tech](https://neon.tech)-en
+   (vagy a Vercel Storage → Neon integrációval). Két kapcsolati stringre lesz
+   szükség: a *pooled* és a *direct* URL-re.
+2. **Vercel:** [vercel.com/new](https://vercel.com/new) → importáld a
+   `grafium/szamla-kezelo` repót.
+3. **Környezeti változók** a projekt beállításainál:
+   - `DATABASE_URL` — a pooled Neon URL
+   - `DIRECT_DATABASE_URL` — a direct (nem poolozott) Neon URL
+     (a Vercel–Neon integráció `DATABASE_URL_UNPOOLED` néven adja)
+   - `AUTH_SECRET` — pl. `openssl rand -base64 32`
+   - `AUTH_TRUST_HOST` — `true`
+   - `CRON_SECRET` — tetszőleges titok; a Vercel Cron ezzel hívja a
+     `/api/cron/*` végpontokat (`Authorization: Bearer …`)
+4. **Deploy** — a build lefuttatja: `prisma db push` → seed → `next build`.
+
+Demó belépés: `demo@grafium.hu` / `demo1234`.
+
+## Gyors indítás lokálisan
 
 ```bash
 npm install
-cp .env.example .env
-npm run db:push        # SQLite séma létrehozása
+cp .env.example .env   # írd be a saját Neon (vagy helyi Postgres) URL-jeidet
+npm run db:push        # séma létrehozása
 npm run db:seed        # demó adatok betöltése
 npm run dev            # http://localhost:3000
 ```
 
-Demó belépés: `demo@grafium.hu` / `demo1234` (bejelentkezés nélkül is működik
-fejlesztői módban — az első felhasználóval dolgozik).
+Ha nincs kéznél Postgres, SQLite-tal is futtatható: a `prisma/schema.prisma`-ban
+állítsd a providert `"sqlite"`-ra, töröld a `directUrl` sort, és a `.env`-ben
+legyen `DATABASE_URL="file:./dev.db"`.
 
-Cron endpointok (token: `CRON_SECRET` a `.env`-ből):
+Cron endpointok kézzel (token: `CRON_SECRET` a `.env`-ből):
 
 ```bash
 curl "http://localhost:3000/api/cron/reminders?token=cron-titok"  # előfordulás-generálás + emlékeztetők

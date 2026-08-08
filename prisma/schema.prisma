@@ -1,6 +1,8 @@
 // Számla- és előfizetés-kezelő — adatmodell
-// Fejlesztés alatt SQLite (ezért az enum-jellegű mezők String-ként, a tömbök/JSON-ok
-// JSON-kódolt String-ként tárolódnak; Postgres-re váltásnál natív enum/array-re cserélhetők).
+// Postgres (Neon/Vercel-kompatibilis). Az enum-jellegű mezők String-ként, a
+// tömbök/JSON-ok JSON-kódolt String-ként tárolódnak (SQLite-kompatibilis forma;
+// később natív enum/array-re cserélhetők). Lokális fejlesztéshez a provider
+// visszaállítható "sqlite"-ra (DATABASE_URL="file:./dev.db", directUrl törlendő).
 // Minden összeg egész, a deviza legkisebb egységében (fillér/cent) tárolva.
 
 generator client {
@@ -8,8 +10,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model Organization {
