@@ -15,6 +15,8 @@ import {
   type Currency, type InvoiceStatus,
 } from "@/lib/constants";
 import { InvoiceDrawer } from "./drawer";
+import { BulkBar } from "./bulk-bar";
+import { NewInvoiceDrawer } from "@/components/forms/new-invoice-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +129,10 @@ export default async function InvoicesPage({
           entityType="invoices"
         />
 
+        {rows.length > 0 && (
+          <BulkBar ids={rows.map((i) => i.id)} categoryOptions={categoryOptions} />
+        )}
+
         {rows.length === 0 ? (
           <EmptyState icon="▤" text="Nincs a szűrésnek megfelelő számla" actionLabel="Szűrők törlése" actionHref="/szamlak" />
         ) : (
@@ -191,6 +197,9 @@ export default async function InvoicesPage({
       </main>
 
       {openInvoice && <InvoiceDrawer invoice={JSON.parse(JSON.stringify(openInvoice))} baseCurrency={base} closeHref={qs({ panel: undefined })} />}
+      {params.uj === "1" && (
+        <NewInvoiceDrawer partnerOptions={partnerOptions} categoryOptions={categoryOptions} closeHref={qs({ uj: undefined })} />
+      )}
     </>
   );
 }

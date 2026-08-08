@@ -59,6 +59,23 @@ export const subscriptionSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
+export const purchaseSchema = z.object({
+  name: z.string().min(1, "A megnevezés kötelező"),
+  partnerId: z.string().uuid().optional().nullable(),
+  purchaseDate: z.coerce.date({ message: "Add meg a vásárlás dátumát" }),
+  currency: currencySchema,
+  netAmount: z.number().int("Az összeget fillérben/centben, egészként tároljuk"),
+  vatAmount: z.number().int(),
+  grossAmount: z.number().int().positive("A bruttó összeg nem lehet nulla"),
+  categoryId: z.string().optional().nullable(),
+  paymentMethod: z.enum(PAYMENT_METHODS).default("CARD"),
+  warrantyUntil: z.coerce.date().optional().nullable(),
+  isAsset: z.boolean().default(false),
+  assetLifetimeMonths: z.number().int().positive().optional().nullable(),
+  tags: z.array(z.string()).default([]),
+  notes: z.string().optional().nullable(),
+});
+
 export const partnerSchema = z.object({
   name: z.string().min(1, "A név kötelező"),
   displayName: z.string().optional().nullable(),

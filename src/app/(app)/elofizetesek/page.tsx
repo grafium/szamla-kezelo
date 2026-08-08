@@ -17,6 +17,7 @@ import {
   BILLING_CYCLE_LABELS, BILLING_CYCLE_MONTHS, SUBSCRIPTION_STATUS_COLORS,
   SUBSCRIPTION_STATUS_LABELS, type BillingCycle, type Currency, type SubscriptionStatus,
 } from "@/lib/constants";
+import { NewSubscriptionDrawer } from "@/components/forms/new-subscription-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,10 @@ export default async function SubscriptionsPage({
   const built = buildFilter(group, subscriptionFields);
 
   const partnerOptions = await prisma.partner.findMany({
+    where: { organizationId: orgId, deletedAt: null },
+    select: { id: true, name: true }, orderBy: { name: "asc" },
+  });
+  const categoryOptions = await prisma.category.findMany({
     where: { organizationId: orgId, deletedAt: null },
     select: { id: true, name: true }, orderBy: { name: "asc" },
   });
@@ -281,6 +286,10 @@ export default async function SubscriptionsPage({
           )}
         </Card>
       </main>
+
+      {params.uj === "1" && (
+        <NewSubscriptionDrawer partnerOptions={partnerOptions} categoryOptions={categoryOptions} closeHref={qs({ uj: undefined })} />
+      )}
     </>
   );
 }
