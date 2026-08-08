@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 
 // NextAuth (Auth.js v5) — e-mail + jelszó; Google OAuth később bővíthető.
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET ?? "demo-titok-csak-bemutatohoz",
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
