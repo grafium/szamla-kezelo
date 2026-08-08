@@ -43,6 +43,13 @@ export default async function StatementDetailPage({
   });
   const invoiceById = new Map(openInvoices.map((i) => [i.id, i]));
 
+  // Partnerlista a szabály-mentés mini-űrlaphoz
+  const partners = await prisma.partner.findMany({
+    where: { organizationId: user.organizationId, deletedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
   const unmatched = statement.transactions.filter((t) => t.matchStatus === "UNMATCHED");
   const matched = statement.transactions.filter((t) => t.matchStatus !== "UNMATCHED");
 
@@ -101,6 +108,11 @@ export default async function StatementDetailPage({
                         id: i.id,
                         label: `${i.invoiceNumber} · ${i.partner?.name ?? "?"} · ${formatMoney(i.grossAmount, i.currency as Currency)}`,
                       }))}
+                      txAmount={tx.amount}
+                      txCurrency={tx.currency}
+                      reference={tx.reference}
+                      counterpartyName={tx.counterpartyName}
+                      partners={partners}
                     />
                   </div>
                 );

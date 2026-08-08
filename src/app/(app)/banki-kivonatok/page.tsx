@@ -28,7 +28,7 @@ export default async function BankStatementsPage() {
   return (
     <>
       <Topbar title="Banki kivonatok"
-        action={<button className="btn-primary">+ Kivonat importálása</button>} />
+        action={<Link href="/banki-kivonatok/import" className="btn-primary">+ Kivonat importálása</Link>} />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-6">
         {statements.length === 0 ? (
           <EmptyState icon="▥" text="Még nincs importált kivonat" />
