@@ -152,6 +152,17 @@ export const REMINDER_TYPE_LABELS: Record<string, string> = {
   WARRANTY_EXPIRING: "Garancia lejár",
 };
 
+export const REMINDER_TYPE_COLORS: Record<string, string> = {
+  SUBSCRIPTION_RENEWAL: "blue",
+  INVOICE_DUE: "orange",
+  INVOICE_OVERDUE: "red",
+  CANCELLATION_DEADLINE: "purple",
+  TRIAL_ENDING: "yellow",
+  BUDGET_EXCEEDED: "red",
+  PRICE_INCREASE: "red",
+  WARRANTY_EXPIRING: "gray",
+};
+
 // Notion pasztell paletta kulcsok — a CSS-ben --{szín} és --{szín}-bg változók
 export const PALETTE = ["red", "orange", "yellow", "green", "blue", "purple", "pink", "gray"] as const;
 export type PaletteColor = (typeof PALETTE)[number];

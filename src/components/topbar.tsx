@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { NotificationBell } from "@/components/notifications";
 
 // Sticky felső fejléc: oldalcím + morzsamenü balra, akció + ⌘K kereső jobbra.
 
@@ -29,6 +30,7 @@ export function Topbar({
       </div>
       <div className="flex items-center gap-2">
         <SearchButton />
+        <NotificationBell />
         <ThemeToggle />
         {action}
       </div>
