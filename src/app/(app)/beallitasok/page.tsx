@@ -5,6 +5,7 @@ import { Badge, Card, EmptyState } from "@/components/ui";
 import { formatMoney } from "@/lib/money";
 import { BANK_TEMPLATES } from "@/services/bank-import/templates";
 import type { Currency } from "@/lib/constants";
+import { MatchingRulesManager } from "./matching-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function SettingsPage() {
   if (!user) return <EmptyState text="Futtasd a seed szkriptet: npm run db:seed" />;
   const org = user.organization;
 
-  const [users, accounts, categories, rules] = await Promise.all([
+  const [users, accounts, categories, rules, partners] = await Promise.all([
     prisma.user.findMany({ where: { organizationId: org.id, deletedAt: null } }),
     prisma.bankAccount.findMany({ where: { organizationId: org.id, deletedAt: null } }),
     prisma.category.findMany({
@@ -25,8 +26,21 @@ export default async function SettingsPage() {
       include: { children: true },
       orderBy: { name: "asc" },
     }),
-    prisma.matchingRule.findMany({ where: { organizationId: org.id } }),
+    prisma.matchingRule.findMany({ where: { organizationId: org.id }, orderBy: { createdAt: "asc" } }),
+    prisma.partner.findMany({
+      where: { organizationId: org.id, deletedAt: null },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
+
+  const partnerNameById = new Map(partners.map((p) => [p.id, p.name]));
+  const allCategories = await prisma.category.findMany({
+    where: { organizationId: org.id, deletedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const categoryNameById = new Map(allCategories.map((c) => [c.id, c.name]));
 
   return (
     <>
@@ -100,17 +114,17 @@ export default async function SettingsPage() {
         </Card>
 
         <Card title="Párosítási szabályok">
-          <div className="flex flex-col gap-2">
-            {rules.length === 0
-              ? <p className="text-[13px]" style={{ color: "var(--text-tertiary)" }}>Nincs mentett szabály.</p>
-              : rules.map((r) => (
-                <div key={r.id} className="text-[13px]">
-                  <span className="font-medium">{r.name}</span>
-                  <span style={{ color: "var(--text-secondary)" }}> — ha a közlemény tartalmazza: </span>
-                  <code>{r.referenceContains}</code>
-                </div>
-              ))}
-          </div>
+          <MatchingRulesManager
+            rules={rules.map((r) => ({
+              id: r.id,
+              name: r.name,
+              referenceContains: r.referenceContains,
+              partnerName: r.partnerId ? partnerNameById.get(r.partnerId) ?? null : null,
+              categoryName: r.categoryId ? categoryNameById.get(r.categoryId) ?? null : null,
+            }))}
+            partners={partners}
+            categories={allCategories}
+          />
         </Card>
 
         <Card title="Import-sablonok (bank CSV)">
