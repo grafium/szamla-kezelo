@@ -5,6 +5,7 @@ import { Topbar } from "@/components/topbar";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge, Card, CurrencyTotals, EmptyState, Money } from "@/components/ui";
 import { invoiceFields } from "@/lib/filters/definitions";
+import { toClientFields } from "@/lib/filters/types";
 import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { decodeFilter } from "@/lib/filters/url";
 import { formatDate } from "@/lib/format";
@@ -120,7 +121,7 @@ export default async function InvoicesPage({
       <Topbar title="Számlák" action={<Link href={qs({ uj: "1" })} className="btn-primary">+ Új számla</Link>} />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
         <FilterBar
-          fields={fields}
+          fields={toClientFields(fields)}
           quickFilters={QUICK_FILTERS}
           savedViews={savedViews.map((v) => ({ id: v.id, name: v.name, filterJson: v.filterJson }))}
           entityType="invoices"

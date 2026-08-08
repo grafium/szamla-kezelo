@@ -7,6 +7,7 @@ import { Topbar } from "@/components/topbar";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge, Card, EmptyState, Money } from "@/components/ui";
 import { subscriptionFields } from "@/lib/filters/definitions";
+import { toClientFields } from "@/lib/filters/types";
 import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate, daysUntil } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -131,7 +132,7 @@ export default async function SubscriptionsPage({
       />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4 flex flex-col gap-6">
         <FilterBar
-          fields={fields}
+          fields={toClientFields(fields)}
           quickFilters={QUICK_FILTERS}
           savedViews={savedViews.map((v) => ({ id: v.id, name: v.name, filterJson: v.filterJson }))}
           entityType="subscriptions"

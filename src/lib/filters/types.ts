@@ -68,6 +68,19 @@ export interface FieldDef {
   idPath?: string;
 }
 
+/** A kliens-oldali szűrősávnak átadható, szerializálható mezőleírás
+ * (a `computed` függvények nem mehetnek át szerver→kliens határon). */
+export interface ClientFieldDef {
+  key: string;
+  label: string;
+  type: FieldType;
+  options?: SelectOption[];
+}
+
+export function toClientFields(defs: FieldDef[]): ClientFieldDef[] {
+  return defs.map(({ key, label, type, options }) => ({ key, label, type, options }));
+}
+
 export const OPERATOR_LABELS: Record<string, string> = {
   contains: "tartalmazza",
   notContains: "nem tartalmazza",

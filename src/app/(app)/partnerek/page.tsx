@@ -6,6 +6,7 @@ import { Topbar } from "@/components/topbar";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { partnerFields } from "@/lib/filters/definitions";
+import { toClientFields } from "@/lib/filters/types";
 import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
@@ -69,7 +70,7 @@ export default async function PartnersPage({
     <>
       <Topbar title="Partnerek" action={<button className="btn-primary">+ Új partner</button>} />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
-        <FilterBar fields={partnerFields} quickFilters={QUICK_FILTERS} entityType="partners" />
+        <FilterBar fields={toClientFields(partnerFields)} quickFilters={QUICK_FILTERS} entityType="partners" />
         {rows.length === 0 ? (
           <EmptyState icon="◔" text="Nincs a szűrésnek megfelelő partner" actionLabel="Szűrők törlése" actionHref="/partnerek" />
         ) : (

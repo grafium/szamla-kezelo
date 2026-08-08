@@ -5,6 +5,7 @@ import { Topbar } from "@/components/topbar";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge, Card, CurrencyTotals, EmptyState, Money } from "@/components/ui";
 import { paymentFields } from "@/lib/filters/definitions";
+import { toClientFields } from "@/lib/filters/types";
 import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate } from "@/lib/format";
 import { sumByCurrency } from "@/lib/money";
@@ -55,7 +56,7 @@ export default async function PaymentsPage({
     <>
       <Topbar title="Kifizetések" />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
-        <FilterBar fields={fields} quickFilters={QUICK_FILTERS} entityType="payments" />
+        <FilterBar fields={toClientFields(fields)} quickFilters={QUICK_FILTERS} entityType="payments" />
         {rows.length === 0 ? (
           <EmptyState icon="⇄" text="Nincs a szűrésnek megfelelő kifizetés" actionLabel="Szűrők törlése" actionHref="/kifizetesek" />
         ) : (

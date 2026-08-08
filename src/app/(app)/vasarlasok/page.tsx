@@ -4,6 +4,7 @@ import { Topbar } from "@/components/topbar";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge, Card, CurrencyTotals, EmptyState, Money } from "@/components/ui";
 import { purchaseFields } from "@/lib/filters/definitions";
+import { toClientFields } from "@/lib/filters/types";
 import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate, daysUntil } from "@/lib/format";
 import { sumByCurrency } from "@/lib/money";
@@ -53,7 +54,7 @@ export default async function PurchasesPage({
     <>
       <Topbar title="Egyszeri vásárlások" />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
-        <FilterBar fields={fields} quickFilters={QUICK_FILTERS} entityType="purchases" />
+        <FilterBar fields={toClientFields(fields)} quickFilters={QUICK_FILTERS} entityType="purchases" />
         {rows.length === 0 ? (
           <EmptyState icon="▣" text="Nincs a szűrésnek megfelelő vásárlás" actionLabel="Szűrők törlése" actionHref="/vasarlasok" />
         ) : (

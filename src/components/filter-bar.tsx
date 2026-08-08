@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { Condition, FieldDef, FilterGroup, Operator } from "@/lib/filters/types";
+import type { ClientFieldDef, Condition, FilterGroup, Operator } from "@/lib/filters/types";
 import { isGroup, OPERATOR_LABELS, OPERATORS_BY_TYPE } from "@/lib/filters/types";
 
 // Kombinálható szűrőfelület (7.1): gyorsszűrő chipek + "+ Szűrő" popover +
@@ -19,7 +19,7 @@ export function FilterBar({
   savedViews = [],
   entityType,
 }: {
-  fields: FieldDef[];
+  fields: ClientFieldDef[];
   quickFilters?: QuickFilter[];
   savedViews?: { id: string; name: string; filterJson: string }[];
   entityType: string;
@@ -148,7 +148,7 @@ export function FilterBar({
   );
 }
 
-function formatValue(cond: Condition, def?: FieldDef): string {
+function formatValue(cond: Condition, def?: ClientFieldDef): string {
   const v = cond.value;
   if (Array.isArray(v)) {
     if (def?.options) {
@@ -161,7 +161,7 @@ function formatValue(cond: Condition, def?: FieldDef): string {
 }
 
 function FilterPopover({ fields, onAdd, onClose }: {
-  fields: FieldDef[];
+  fields: ClientFieldDef[];
   onAdd: (c: Condition) => void;
   onClose: () => void;
 }) {
