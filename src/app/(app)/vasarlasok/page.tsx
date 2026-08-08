@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Topbar } from "@/components/topbar";
@@ -9,6 +10,7 @@ import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate, daysUntil } from "@/lib/format";
 import { sumByCurrency } from "@/lib/money";
 import { PAYMENT_METHOD_LABELS, type Currency, type PaymentMethod } from "@/lib/constants";
+import { NewPurchaseDrawer } from "@/components/forms/new-purchase-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +39,19 @@ export default async function PurchasesPage({
     where: { organizationId: orgId, deletedAt: null },
     select: { id: true, name: true }, orderBy: { name: "asc" },
   });
+  const categoryOptions = await prisma.category.findMany({
+    where: { organizationId: orgId, deletedAt: null },
+    select: { id: true, name: true }, orderBy: { name: "asc" },
+  });
   const fields = purchaseFields.map((f) =>
     f.key === "partner" ? { ...f, options: partnerOptions.map((p) => ({ value: p.id, label: p.name })) } : f
   );
+
+  const qs = (overrides: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...params, ...overrides })) if (v != null) p.set(k, v);
+    return `?${p.toString()}`;
+  };
 
   const all = await prisma.purchase.findMany({
     where: { organizationId: orgId, deletedAt: null, ...built.where },
@@ -52,7 +64,7 @@ export default async function PurchasesPage({
 
   return (
     <>
-      <Topbar title="Egyszeri vásárlások" />
+      <Topbar title="Egyszeri vásárlások" action={<Link href={qs({ uj: "1" })} className="btn-primary">+ Új vásárlás</Link>} />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
         <FilterBar fields={toClientFields(fields)} quickFilters={QUICK_FILTERS} entityType="purchases" />
         {rows.length === 0 ? (
@@ -107,6 +119,10 @@ export default async function PurchasesPage({
           <CurrencyTotals totals={totals} baseTotal={baseTotal} baseCurrency={base} />
         </div>
       </main>
+
+      {params.uj === "1" && (
+        <NewPurchaseDrawer partnerOptions={partnerOptions} categoryOptions={categoryOptions} closeHref={qs({ uj: undefined })} />
+      )}
     </>
   );
 }

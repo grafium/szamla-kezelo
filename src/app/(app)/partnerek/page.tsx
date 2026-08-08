@@ -11,6 +11,7 @@ import { applyComputed, buildFilter } from "@/lib/filters/prisma";
 import { formatDate } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 import { PARTNER_TYPE_LABELS, type Currency, type PartnerType } from "@/lib/constants";
+import { NewPartnerDrawer } from "@/components/forms/new-partner-drawer";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +67,15 @@ export default async function PartnersPage({
   });
   const rows = applyComputed(withComputed, built);
 
+  const qs = (overrides: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...params, ...overrides })) if (v != null) p.set(k, v);
+    return `?${p.toString()}`;
+  };
+
   return (
     <>
-      <Topbar title="Partnerek" action={<button className="btn-primary">+ Új partner</button>} />
+      <Topbar title="Partnerek" action={<Link href={qs({ uj: "1" })} className="btn-primary">+ Új partner</Link>} />
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-4">
         <FilterBar fields={toClientFields(partnerFields)} quickFilters={QUICK_FILTERS} entityType="partners" />
         {rows.length === 0 ? (
@@ -113,6 +120,8 @@ export default async function PartnersPage({
           </Card>
         )}
       </main>
+
+      {params.uj === "1" && <NewPartnerDrawer closeHref={qs({ uj: undefined })} />}
     </>
   );
 }
