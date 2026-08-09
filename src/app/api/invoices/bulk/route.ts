@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { INVOICE_STATUSES } from "@/lib/constants";
 
 const bulkSchema = z.object({
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "BULK_UPDATE",
       entityType: "Invoice",
       entityId: "bulk",

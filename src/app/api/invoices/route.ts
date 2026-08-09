@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { toBase } from "@/lib/rates";
 import { invoiceSchema } from "@/lib/validation";
 import type { Currency } from "@/lib/constants";
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "CREATE",
       entityType: "Invoice",
       entityId: created.id,

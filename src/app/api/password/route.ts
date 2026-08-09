@@ -3,6 +3,7 @@ import { z } from "zod";
 import { compare, hashSync } from "bcryptjs";
 import { requireUser } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 
 // Jelszóváltoztatás — kizárólag valódi (bejelentkezett) sessionnel,
 // demó-módban sem elérhető session nélkül.
@@ -36,6 +37,7 @@ export async function PATCH(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "PASSWORD_CHANGE",
       entityType: "User",
       entityId: user.id,

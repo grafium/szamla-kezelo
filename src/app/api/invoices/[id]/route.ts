@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { INVOICE_STATUSES } from "@/lib/constants";
 
 const patchSchema = z.object({
@@ -56,6 +57,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "UPDATE",
       entityType: "Invoice",
       entityId: id,

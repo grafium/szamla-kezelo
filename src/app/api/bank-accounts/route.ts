@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { bankAccountSchema } from "@/lib/validation";
 
 // Bankszámla létrehozása. A nyitó egyenleg egyben a kezdő aktuális egyenleg is;
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "CREATE",
       entityType: "BankAccount",
       entityId: created.id,

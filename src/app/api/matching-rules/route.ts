@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 
 // Párosítási szabály létrehozása: ha a közlemény tartalmazza a mintát,
 // az importált tétel megkapja a partnert/kategóriát.
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "CREATE",
       entityType: "MatchingRule",
       entityId: created.id,

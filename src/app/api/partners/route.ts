@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { partnerSchema } from "@/lib/validation";
 
 const createSchema = partnerSchema.extend({
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "CREATE",
       entityType: "Partner",
       entityId: created.id,

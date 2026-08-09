@@ -523,3 +523,24 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
 }
+
+// Az első-indítási varázsló (/setup) zárja. A telepítés tranzakciója ezt a
+// sort hozza létre fix azonosítóval, így két egyidejű kérés közül a második
+// egyedi-kulcs hibára fut, nem hoz létre második szervezetet.
+model SetupGuard {
+  id        String   @id // mindig "singleton"
+  createdAt DateTime @default(now())
+}
+
+// Bejelentkezési próbálkozások számlálója. Adatbázisban tartjuk, mert
+// serverless környezetben minden példánynak külön memóriája van, így egy
+// memóriabeli számláló nem ad globális korlátot.
+model LoginAttempt {
+  key          String    @id // kisbetűs e-mail cím
+  count        Int       @default(0)
+  windowEndsAt DateTime
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([windowEndsAt])
+}

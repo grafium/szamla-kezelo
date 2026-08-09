@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { generateOccurrences } from "@/lib/occurrences";
 import { subscriptionSchema } from "@/lib/validation";
 
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "CREATE",
       entityType: "Subscription",
       entityId: created.id,
