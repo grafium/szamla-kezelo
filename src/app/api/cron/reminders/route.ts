@@ -30,7 +30,19 @@ export async function GET(req: NextRequest) {
   let emailsSent = 0;
   const emailErrors: { email: string; error: string }[] = [];
   if (digest === "daily" || digest === "weekly") {
-    const sender = getEmailSender();
+    let sender;
+    try {
+      sender = getEmailSender();
+    } catch (err) {
+      // Hibás e-mail konfiguráció (pl. rossz EMAIL_FROM) — beszédes hiba,
+      // ne néma 500-as válasz.
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("E-mail konfigurációs hiba:", message);
+      return NextResponse.json(
+        { ok: false, error: message, occurrencesCreated: occurrences, remindersCreated: reminders },
+        { status: 500 }
+      );
+    }
     const today = startOfDay(new Date());
     for (const org of orgs) {
       const users = await prisma.user.findMany({
