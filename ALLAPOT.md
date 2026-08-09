@@ -53,7 +53,15 @@ A demóban egyik sem kell (`DEMO_MODE` és `SEED_DEMO` a kódba/branchbe van ég
    (ez a domain hitelesített, próbaküldés `delivered` státusszal átment).
    Ellenőrzés redeploy után: `GET /api/cron/reminders?token=<CRON_SECRET>&digest=daily`
    → `emailsSent: 1` és üres `emailErrors`.
-3. **Preview-linkek Vercel-belépés mögött.** Mindkét projekten
+3. **A `szamla-kezelo-2026` projektben a Preview környezetnek nincs
+   adatbázis-változója.** A `DATABASE_URL` és a `DIRECT_DATABASE_URL` csak a
+   Production környezetre van beállítva, ezért *minden* nem-`main` ág preview
+   buildje elhasal a séma-validációnál (`P1012: … DIRECT_DATABASE_URL`), a
+   kódtól függetlenül — a `vercel-demo` ág buildjei csak azért futnak le, mert
+   ott a séma SQLite-ra van állítva. Teendő, ha kell működő preview: a két
+   változó felvétele a Preview környezetbe is (ideálisan külön Neon-ágra, hogy
+   a preview `prisma db push` ne az éles adatbázist érje).
+4. **Preview-linkek Vercel-belépés mögött.** Mindkét projekten
    `ssoProtection: all_except_custom_domains`, ezért a `…git-vercel-demo…`
    típusú preview URL-ek kívülről nem oszthatók meg; publikusan csak a
    production alias érhető el.
