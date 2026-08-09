@@ -5,6 +5,7 @@ import {
 import type { Condition, FieldDef, FilterGroup } from "./types";
 import { isGroup } from "./types";
 import { parseJsonArray } from "@/lib/format";
+import { insensitive } from "@/lib/db-mode";
 
 // A szűrőcsoportból Prisma `where` feltételt épít. A számított mezőkre (pl. havi
 // ekvivalens, hátralévő napok) a lekérdezés után JS-szűrő fut (applyComputed).
@@ -48,17 +49,21 @@ function conditionToWhere(cond: Condition, def: FieldDef): Where | null {
   const p = def.path;
   const v = cond.value;
   switch (def.type) {
-    case "text":
+    case "text": {
+      // Postgresen a szöveges összehasonlítás alapból kis-nagybetű-érzékeny,
+      // ezért a felhasználó által beírt szűrőkhöz insensitive módot kérünk.
+      const ci = insensitive();
       switch (cond.op) {
-        case "contains": return setPath(p, { contains: String(v ?? "") });
-        case "notContains": return { NOT: setPath(p, { contains: String(v ?? "") }) };
-        case "equals": return setPath(p, String(v ?? ""));
-        case "startsWith": return setPath(p, { startsWith: String(v ?? "") });
-        case "endsWith": return setPath(p, { endsWith: String(v ?? "") });
+        case "contains": return setPath(p, { contains: String(v ?? ""), ...ci });
+        case "notContains": return { NOT: setPath(p, { contains: String(v ?? ""), ...ci }) };
+        case "equals": return setPath(p, { equals: String(v ?? ""), ...ci });
+        case "startsWith": return setPath(p, { startsWith: String(v ?? ""), ...ci });
+        case "endsWith": return setPath(p, { endsWith: String(v ?? ""), ...ci });
         case "empty": return { OR: [setPath(p, null), setPath(p, "")] };
         case "notEmpty": return { AND: [{ NOT: setPath(p, null) }, { NOT: setPath(p, "") }] };
       }
       break;
+    }
     case "number":
     case "money": {
       // money: a felhasználó major egységben ad meg értéket → minor unitra váltjuk

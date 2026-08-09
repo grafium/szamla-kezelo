@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { formatMoney } from "@/lib/money";
+import { insensitive } from "@/lib/db-mode";
 import type { Currency } from "@/lib/constants";
 
 // Globális kereső (⌘K): partner, számlaszám, közlemény, csatolmány OCR-szövege.
@@ -13,15 +14,18 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json([]);
   const orgId = user.organizationId;
 
+  // Postgresen a `contains` kis-nagybetű-érzékeny — a kereséshez insensitive mód kell.
+  const ci = insensitive();
+
   const [partners, invoices, transactions, attachments] = await Promise.all([
     prisma.partner.findMany({
-      where: { organizationId: orgId, deletedAt: null, name: { contains: q } },
+      where: { organizationId: orgId, deletedAt: null, name: { contains: q, ...ci } },
       take: 4,
     }),
     prisma.invoice.findMany({
       where: {
         organizationId: orgId, deletedAt: null,
-        OR: [{ invoiceNumber: { contains: q } }, { description: { contains: q } }],
+        OR: [{ invoiceNumber: { contains: q, ...ci } }, { description: { contains: q, ...ci } }],
       },
       include: { partner: true },
       take: 5,
@@ -29,12 +33,12 @@ export async function GET(req: NextRequest) {
     prisma.bankTransaction.findMany({
       where: {
         bankAccount: { organizationId: orgId },
-        OR: [{ reference: { contains: q } }, { counterpartyName: { contains: q } }],
+        OR: [{ reference: { contains: q, ...ci } }, { counterpartyName: { contains: q, ...ci } }],
       },
       take: 4,
     }),
     prisma.attachment.findMany({
-      where: { organizationId: orgId, deletedAt: null, ocrText: { contains: q } },
+      where: { organizationId: orgId, deletedAt: null, ocrText: { contains: q, ...ci } },
       take: 3,
     }),
   ]);
