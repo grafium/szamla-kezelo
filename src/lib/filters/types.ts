@@ -63,6 +63,13 @@ export interface FieldDef {
   path?: string;
   /** Számított mező: a lekérdezés után, JS-ben szűrjük. */
   computed?: (row: any) => unknown;
+  /**
+   * Számított mező adatbázis-szintű megfelelője, ha van (pl. „van csatolmány" →
+   * `attachments: { some: {} }`). Ha egy adott operátorra nem képezhető le,
+   * adjon vissza null-t — olyankor a mező a JS-oldali szűrésre esik vissza.
+   * Ez teszi lehetővé, hogy a lista lapozása a legtöbb esetben a DB-ben maradjon.
+   */
+  toWhere?: (cond: Condition) => Record<string, unknown> | null;
   options?: SelectOption[];
   /** relációs select-nél (partner, kategória) a Prisma id-mező útvonala */
   idPath?: string;

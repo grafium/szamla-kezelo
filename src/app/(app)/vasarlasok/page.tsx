@@ -53,14 +53,22 @@ export default async function PurchasesPage({
     return `?${p.toString()}`;
   };
 
-  const all = await prisma.purchase.findMany({
-    where: { organizationId: orgId, deletedAt: null, ...built.where },
-    include: { partner: true, category: true },
-    orderBy: { purchaseDate: "desc" },
-  });
+  // A vásárlás-szűrők mind adatbázis-szintűek, ezért az összegzés is oda kerül;
+  // a lista felső korláttal töltődik, hogy a válaszidő ne nőjön a sorok számával.
+  const purchaseWhere = { organizationId: orgId, deletedAt: null, ...built.where };
+  const [all, byCurrency, baseSum] = await Promise.all([
+    prisma.purchase.findMany({
+      where: purchaseWhere,
+      include: { partner: true, category: true },
+      orderBy: { purchaseDate: "desc" },
+      take: 500,
+    }),
+    prisma.purchase.groupBy({ by: ["currency"], where: purchaseWhere, _sum: { grossAmount: true } }),
+    prisma.purchase.aggregate({ where: purchaseWhere, _sum: { baseAmount: true } }),
+  ]);
   const rows = applyComputed(all, built);
-  const totals = sumByCurrency(rows.map((r) => ({ amount: r.grossAmount, currency: r.currency })));
-  const baseTotal = rows.reduce((s, r) => s + r.baseAmount, 0);
+  const totals = Object.fromEntries(byCurrency.map((g) => [g.currency, g._sum.grossAmount ?? 0]));
+  const baseTotal = baseSum._sum.baseAmount ?? 0;
 
   return (
     <>

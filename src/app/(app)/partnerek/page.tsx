@@ -38,30 +38,66 @@ export default async function PartnersPage({
 
   const partners = await prisma.partner.findMany({
     where: { organizationId: orgId, deletedAt: null, ...built.where },
-    include: {
-      invoices: { where: { deletedAt: null } },
-      subscriptions: { where: { deletedAt: null } },
-      payments: { where: { deletedAt: null }, orderBy: { paymentDate: "desc" }, take: 1 },
-    },
     orderBy: { name: "asc" },
   });
 
+  // A számított oszlopokat (nyitott tartozás, idei költés, utolsó tranzakció,
+  // aktív előfizetések) partnerenkénti összesítéssel kérjük le. Korábban minden
+  // partner ÖSSZES számlája betöltődött — így a lista mérete a számlaszámmal
+  // együtt nőtt; most partnerenként egy-egy összegzett sor jön vissza.
   const yearStart = startOfYear(new Date());
+  const invoiceScope = { organizationId: orgId, deletedAt: null };
+  const [openAgg, yearAgg, lastInvoiceAgg, lastPaymentAgg, subAgg] = await Promise.all([
+    prisma.invoice.groupBy({
+      by: ["partnerId"],
+      where: { ...invoiceScope, status: { in: ["APPROVED", "AWAITING_APPROVAL", "PARTIALLY_PAID", "OVERDUE"] } },
+      _sum: { baseAmount: true },
+    }),
+    prisma.invoice.groupBy({
+      by: ["partnerId"],
+      where: { ...invoiceScope, issueDate: { gte: yearStart }, status: { notIn: ["CANCELLED", "DRAFT"] } },
+      _sum: { baseAmount: true },
+    }),
+    prisma.invoice.groupBy({
+      by: ["partnerId"],
+      where: invoiceScope,
+      _max: { issueDate: true },
+    }),
+    prisma.payment.groupBy({
+      by: ["partnerId"],
+      where: { organizationId: orgId, deletedAt: null },
+      _max: { paymentDate: true },
+    }),
+    prisma.subscription.groupBy({
+      by: ["partnerId"],
+      where: { organizationId: orgId, deletedAt: null, status: { in: ["ACTIVE", "TRIAL"] } },
+      _count: { _all: true },
+    }),
+  ]);
+
+  const num = <T,>(rows: { partnerId: string | null }[], pick: (r: any) => T) =>
+    new Map(rows.filter((r) => r.partnerId).map((r) => [r.partnerId as string, pick(r)]));
+  const openMap = num(openAgg, (r) => r._sum.baseAmount ?? 0);
+  const yearMap = num(yearAgg, (r) => r._sum.baseAmount ?? 0);
+  const lastInvoiceMap = num(lastInvoiceAgg, (r) => r._max.issueDate as Date | null);
+  const lastPaymentMap = num(lastPaymentAgg, (r) => r._max.paymentDate as Date | null);
+  const subMap = num(subAgg, (r) => r._count._all as number);
+
   const withComputed = partners.map((p) => {
-    const open = p.invoices.filter((i) =>
-      ["APPROVED", "AWAITING_APPROVAL", "PARTIALLY_PAID", "OVERDUE"].includes(i.status));
-    const openBalance = open.reduce((s, i) => s + i.baseAmount, 0);
-    const spentThisYear = p.invoices
-      .filter((i) => i.issueDate >= yearStart && !["CANCELLED", "DRAFT"].includes(i.status))
-      .reduce((s, i) => s + i.baseAmount, 0);
-    const lastInvoice = [...p.invoices].sort((a, b) => +b.issueDate - +a.issueDate)[0];
+    const lastPayment = lastPaymentMap.get(p.id) ?? null;
+    const lastInvoice = lastInvoiceMap.get(p.id) ?? null;
+    // A két dátum közül a későbbi az utolsó tranzakció (korábban mindig a
+    // kifizetés nyert, így egy frissebb számla dátuma elveszett).
+    const lastTransactionAt =
+      lastPayment && lastInvoice ? (lastPayment > lastInvoice ? lastPayment : lastInvoice)
+      : lastPayment ?? lastInvoice;
     return {
       ...p,
       _computed: {
-        openBalance,
-        spentThisYear,
-        lastTransactionAt: p.payments[0]?.paymentDate ?? lastInvoice?.issueDate ?? null,
-        activeSubscriptionCount: p.subscriptions.filter((s) => ["ACTIVE", "TRIAL"].includes(s.status)).length,
+        openBalance: openMap.get(p.id) ?? 0,
+        spentThisYear: yearMap.get(p.id) ?? 0,
+        lastTransactionAt,
+        activeSubscriptionCount: subMap.get(p.id) ?? 0,
       },
     };
   });

@@ -45,6 +45,8 @@ function dateRange(op: string, value: unknown, fiscalYearStart = 1): [Date, Date
 }
 
 function conditionToWhere(cond: Condition, def: FieldDef): Where | null {
+  // Számított mező, aminek van adatbázis-szintű megfelelője
+  if (!def.path && def.toWhere) return def.toWhere(cond);
   if (!def.path) return null; // computed → JS-ben szűrjük
   const p = def.path;
   const v = cond.value;
@@ -185,9 +187,18 @@ export function buildFilter(group: FilterGroup | null, defs: FieldDef[]): BuiltF
   if (!group || group.items.length === 0) return { where: {}, computedPredicate: null };
   const defMap = new Map(defs.map((d) => [d.key, d]));
 
+  /** Egy feltétel a DB-ben szűrhető-e (közvetlen mezőútvonal vagy toWhere leképzés)? */
+  function isDbFilterable(cond: Condition): boolean {
+    const def = defMap.get(cond.field);
+    if (!def) return true; // ismeretlen mező: nem szűrünk rá, JS-t sem igényel
+    if (def.path) return true;
+    if (def.toWhere) return def.toWhere(cond) !== null;
+    return false;
+  }
+
   function groupHasComputed(g: FilterGroup): boolean {
     return g.items.some((item) =>
-      isGroup(item) ? groupHasComputed(item) : !defMap.get(item.field)?.path
+      isGroup(item) ? groupHasComputed(item) : !isDbFilterable(item)
     );
   }
 
@@ -218,7 +229,7 @@ export function buildFilter(group: FilterGroup | null, defs: FieldDef[]): BuiltF
       } else {
         const def = defMap.get(item.field);
         if (!def) continue;
-        if (!def.path || orWithComputed) {
+        if (!isDbFilterable(item) || orWithComputed) {
           if (def.computed || def.path) {
             // OR-csoportban a DB-s feltételt is JS-ben értékeljük az útvonal alapján
             const evalRow = (row: any) => {

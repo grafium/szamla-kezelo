@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { addDays, format, startOfDay, startOfMonth, subMonths } from "date-fns";
+import { addDays, addMonths, format, startOfDay, startOfMonth, subMonths } from "date-fns";
 import { hu } from "date-fns/locale";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -24,14 +24,19 @@ export default async function DashboardPage() {
   const today = startOfDay(new Date());
   const in30 = addDays(today, 30);
 
-  const [openInvoices, unmatchedCount, inboxCount, upcomingOccurrences, activeSubs, dueInvoices] =
+  // A KPI-khez csak összegek kellenek — a nyitott számlák teljes listáját nem
+  // töltjük be (10 000 számlánál ez volt a dashboard legdrágább lekérdezése).
+  const openWhere = {
+    organizationId: orgId, deletedAt: null, direction: "INCOMING",
+    status: { in: ["APPROVED", "AWAITING_APPROVAL", "PARTIALLY_PAID", "OVERDUE"] },
+  };
+  const overdueWhere = { ...openWhere, status: "OVERDUE" };
+
+  const [openAgg, openByCurrency, overdueAgg, unmatchedCount, inboxCount, upcomingOccurrences, activeSubs, dueInvoices] =
     await Promise.all([
-      prisma.invoice.findMany({
-        where: {
-          organizationId: orgId, deletedAt: null, direction: "INCOMING",
-          status: { in: ["APPROVED", "AWAITING_APPROVAL", "PARTIALLY_PAID", "OVERDUE"] },
-        },
-      }),
+      prisma.invoice.aggregate({ where: openWhere, _sum: { baseAmount: true } }),
+      prisma.invoice.groupBy({ by: ["currency"], where: openWhere, _sum: { grossAmount: true } }),
+      prisma.invoice.aggregate({ where: overdueWhere, _sum: { baseAmount: true }, _count: { _all: true } }),
       prisma.bankTransaction.count({
         where: { matchStatus: "UNMATCHED", bankAccount: { organizationId: orgId } },
       }),
@@ -69,10 +74,15 @@ export default async function DashboardPage() {
     currency === "EUR" ? convertMinor(amount, rateEUR, base) :
     currency === "USD" ? convertMinor(amount, rateUSD, base) : amount;
 
-  const openTotal = openInvoices.reduce((s, i) => s + toBaseNow(i.grossAmount, i.currency), 0);
-  const openByCurrency = sumByCurrency(openInvoices.map((i) => ({ amount: i.grossAmount, currency: i.currency })));
-  const overdue = openInvoices.filter((i) => i.status === "OVERDUE");
-  const overdueTotal = overdue.reduce((s, i) => s + toBaseNow(i.grossAmount, i.currency), 0);
+  // A nyitott/lejárt összegek a rögzített (számlánkénti) árfolyammal számolt
+  // baseAmount mezőből jönnek — ez pontosabb is, mint a mai árfolyammal utólag
+  // átszámolni, és nem igényli a sorok betöltését.
+  const openTotal = openAgg._sum.baseAmount ?? 0;
+  const openByCurrencyTotals = Object.fromEntries(
+    openByCurrency.map((g) => [g.currency, g._sum.grossAmount ?? 0])
+  );
+  const overdueCount = overdueAgg._count._all;
+  const overdueTotal = overdueAgg._sum.baseAmount ?? 0;
 
   const next30Occ = upcomingOccurrences.reduce((s, o) => s + toBaseNow(o.expectedAmount, o.currency), 0);
   const next30Inv = dueInvoices.reduce((s, i) => s + toBaseNow(i.grossAmount, i.currency), 0);
@@ -88,29 +98,51 @@ export default async function DashboardPage() {
 
   // Deviza-kitettség: nyitott számlák + következő 12 hó előfizetés devizánként
   const exposure = sumByCurrency([
-    ...openInvoices.map((i) => ({ amount: i.grossAmount, currency: i.currency })),
+    ...Object.entries(openByCurrencyTotals).map(([currency, amount]) => ({ amount, currency })),
     ...activeSubs.map((s) => ({ amount: monthlyEquivalent(s) * 12, currency: s.currency })),
   ]);
 
   // Havi kiadás diagram (12 hónap, kategóriánként) a kifizetett/jóváhagyott számlákból
   const from = startOfMonth(subMonths(today, 11));
-  const spendInvoices = await prisma.invoice.findMany({
-    where: { organizationId: orgId, deletedAt: null, direction: "INCOMING", issueDate: { gte: from }, status: { notIn: ["CANCELLED", "DRAFT"] } },
-    include: { category: true },
-  });
-  const monthKeys: string[] = [];
-  for (let i = 11; i >= 0; i--) monthKeys.push(format(subMonths(today, i), "yyyy. MMM", { locale: hu }));
+  // A diagram hónaponként egy-egy összesítő lekérdezésből épül (12 párhuzamos,
+  // indexelt aggregátum), a számlasorok betöltése helyett. Az összeg a rögzített
+  // árfolyammal számolt baseAmount — így a korábbi hónapok nem változnak
+  // visszamenőleg az árfolyam mozgásával.
+  const months = Array.from({ length: 12 }, (_, k) => startOfMonth(subMonths(today, 11 - k)));
+  const [monthlyGroups, allCategories] = await Promise.all([
+    Promise.all(
+      months.map((monthStart) =>
+        prisma.invoice.groupBy({
+          by: ["categoryId"],
+          where: {
+            organizationId: orgId, deletedAt: null, direction: "INCOMING",
+            status: { notIn: ["CANCELLED", "DRAFT"] },
+            issueDate: { gte: monthStart, lt: startOfMonth(addMonths(monthStart, 1)) },
+          },
+          _sum: { baseAmount: true },
+        })
+      )
+    ),
+    prisma.category.findMany({
+      where: { organizationId: orgId },
+      select: { id: true, name: true, color: true },
+    }),
+  ]);
+  const categoryById = new Map(allCategories.map((c) => [c.id, c]));
+
   const catNames = new Map<string, string>();
-  const chartMap = new Map<string, Record<string, number>>();
-  for (const inv of spendInvoices) {
-    const key = format(inv.issueDate, "yyyy. MMM", { locale: hu });
-    const cat = inv.category?.name ?? "Egyéb";
-    catNames.set(cat, inv.category?.color ?? "gray");
-    const row = chartMap.get(key) ?? {};
-    row[cat] = (row[cat] ?? 0) + toBaseNow(inv.grossAmount, inv.currency);
-    chartMap.set(key, row);
-  }
-  const chartData = monthKeys.map((m) => ({ month: m.replace(/^\d{4}\. /, ""), ...(chartMap.get(m) ?? {}) }));
+  const chartData = months.map((monthStart, idx) => {
+    const row: Record<string, string | number> = {
+      month: format(monthStart, "MMM", { locale: hu }),
+    };
+    for (const g of monthlyGroups[idx]) {
+      const category = g.categoryId ? categoryById.get(g.categoryId) : null;
+      const name = category?.name ?? "Egyéb";
+      catNames.set(name, category?.color ?? "gray");
+      row[name] = ((row[name] as number) ?? 0) + (g._sum.baseAmount ?? 0);
+    }
+    return row;
+  });
   const chartCategories = [...catNames.entries()].map(([name, color]) => ({ name, color }));
 
   // Előfizetések aránya kategóriánként + top 5
@@ -168,9 +200,9 @@ export default async function DashboardPage() {
       <main className="max-w-[1280px] mx-auto px-4 md:px-8 py-6 flex flex-col gap-6">
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <KpiCard label="Nyitott tartozás" value={formatMoney(openTotal, base)}
-            sub={Object.entries(openByCurrency).map(([c, v]) => `${c}: ${formatMoney(v, c as Currency)}`).join(" · ")} />
+            sub={Object.entries(openByCurrencyTotals).map(([c, v]) => `${c}: ${formatMoney(v, c as Currency)}`).join(" · ")} />
           <KpiCard label="Lejárt tartozás" value={formatMoney(overdueTotal, base)}
-            sub={`${overdue.length} számla`} color={overdue.length ? "red" : undefined} />
+            sub={`${overdueCount} számla`} color={overdueCount ? "red" : undefined} />
           <KpiCard label="Köv. 30 nap kiadása" value={formatMoney(next30Occ + next30Inv, base)}
             sub={`${upcomingOccurrences.length} megújulás · ${dueInvoices.length} számla`} />
           <KpiCard label="Előfizetések / hó" value={formatMoney(monthlySubCost, base)}
@@ -221,8 +253,8 @@ export default async function DashboardPage() {
                 <TodoRow href="/elofizetesek" color="red"
                   text={`${priceIncreased.length} előfizetés ára emelkedett`} show={priceIncreased.length > 0} />
                 <TodoRow href="/szamlak" color="red"
-                  text={`${overdue.length} számla lejárt`} show={overdue.length > 0} />
-                {inboxCount === 0 && unmatchedCount === 0 && priceIncreased.length === 0 && overdue.length === 0 && (
+                  text={`${overdueCount} számla lejárt`} show={overdueCount > 0} />
+                {inboxCount === 0 && unmatchedCount === 0 && priceIncreased.length === 0 && overdueCount === 0 && (
                   <p className="text-[13px]" style={{ color: "var(--text-tertiary)" }}>Minden rendben — nincs teendő.</p>
                 )}
               </div>
