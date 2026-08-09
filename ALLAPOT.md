@@ -10,14 +10,16 @@ azonnal folytatni tudja. Utolsó frissítés: 2026. 08. 09. (2. munkamenet vége
 | URL | https://szamla-kezelo-2026.vercel.app | https://szamla-kezelo.vercel.app |
 | Vercel projekt | `szamla-kezelo-2026` | `szamla-kezelo` |
 | Git ág (production branch) | `main` | `vercel-demo` |
-| Utolsó élesített commit | `f2d9db5` | `05e060d` |
-| Utolsó production deploy | `dpl_5RQ5jzEfwPASNoQZk3TqbJ7VBB6S` | `dpl_WV7MqfrJXhfHycUXAcV6Fak18W8X` |
+| Élesített commit | a `main` ág feje | a `vercel-demo` ág feje |
 | Adatbázis | Neon Postgres (`neon-amber-envelope`) | build közben generált SQLite, a lambda `/tmp`-jébe másolva |
 | Bejelentkezés | kötelező (`/` → `/login`) | kikapcsolva (`DEMO_MODE=1`) |
 | Adatok | valós, tartós | demó adatok, példány újraindulásakor visszaáll |
 
-Mindkét környezet `READY`, és mindkettő a friss kódot szolgálja ki. A gyors
-ellenőrzés két jele:
+Mindkét ág feje élesítve van, és mindkét környezet a friss kódot szolgálja ki
+(a `main` push az éles projektben, a `vercel-demo` push a demóban indít
+production buildet — konkrét commit-azonosítót ez a dokumentum szándékosan nem
+rögzít, mert a saját frissítése is új commitot csinál). A gyors ellenőrzés két
+jele:
 
 ```bash
 curl -sI https://szamla-kezelo.vercel.app | grep -i content-security-policy  # van fejléc = friss kód
