@@ -282,13 +282,23 @@ export function ImportWizard({ bankAccounts }: { bankAccounts: AccountOption[] }
       {step === 1 && (
         <section className="card p-4 grid sm:grid-cols-2 gap-4">
           <Field label="Bankszámla *">
-            <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {bankAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.currency}{a.bankName ? ` · ${a.bankName}` : ""})
-                </option>
-              ))}
-            </select>
+            {bankAccounts.length === 0 ? (
+              <div className="flex flex-col items-start gap-2">
+                <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                  Még nincs rögzített bankszámla, ezért nem lehet kivonatot importálni.
+                  Vegyél fel egyet a beállításokban, majd térj vissza ide.
+                </span>
+                <Link href="/beallitasok" className="btn-primary">Bankszámla felvétele</Link>
+              </div>
+            ) : (
+              <select className="input" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.currency}{a.bankName ? ` · ${a.bankName}` : ""})
+                  </option>
+                ))}
+              </select>
+            )}
           </Field>
           <Field label="Bank-sablon">
             <select className="input" value={templateId} onChange={(e) => selectTemplate(e.target.value)}>

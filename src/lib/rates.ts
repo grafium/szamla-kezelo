@@ -23,7 +23,14 @@ export async function getRate(from: Currency, to: Currency, date: Date): Promise
     "EUR-HUF": 395, "USD-HUF": 365, "EUR-USD": 1.08, "USD-EUR": 0.93,
     "HUF-EUR": 1 / 395, "HUF-USD": 1 / 365,
   };
-  return fallback[`${from}-${to}`] ?? 1;
+  const rate = fallback[`${from}-${to}`] ?? 1;
+  // Legyen látható a logban, ha vésztartalék-árfolyammal számoltunk: ilyenkor
+  // az árfolyam-szinkron (GET /api/cron/rates) nem futott le, vagy üres a tábla.
+  console.warn(
+    `[árfolyam] Nincs tárolt árfolyam a ${from}→${to} párra (${date.toISOString().slice(0, 10)}), ` +
+      `vésztartalék értékkel számolunk: ${rate}. Futtasd az árfolyam-szinkront (/api/cron/rates).`
+  );
+  return rate;
 }
 
 /** Minor unit összeg átváltása alapdevizára a megadott napi árfolyammal. */

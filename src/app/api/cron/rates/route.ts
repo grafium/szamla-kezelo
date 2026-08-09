@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { syncRates, MAX_DAYS } from "@/services/rates/sync";
 
-// Napi árfolyam-frissítés. Éles környezetben az MNB (HUF) és ECB (EUR/USD)
-// API-ját kell hívni; itt az utolsó ismert árfolyamot visszük tovább a mai napra
-// (hétvégén/ünnepnapon amúgy is az utolsó munkanapi árfolyam érvényes).
+// Napi árfolyam-frissítés (cron). Az MNB SOAP-végpontjáról tölti az EUR→HUF és
+// USD→HUF árfolyamot, az ECB-ből az EUR→USD-t; MNB-hiba esetén mindent az
+// ECB EUR-alapú árfolyamaiból származtat. Ha egyik forrás sem érhető el, 502-t
+// ad vissza — csendben nem „sikerül”.
+//
+// Query: ?token=<CRON_SECRET>&days=N   (N = 1…90, alapértelmezés 1)
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? req.headers.get("authorization")?.replace("Bearer ", "");
@@ -11,23 +17,25 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Érvénytelen token" }, { status: 401 });
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const pairs: [string, string][] = [["EUR", "HUF"], ["USD", "HUF"], ["EUR", "USD"]];
-  let updated = 0;
+  const daysParam = Number(req.nextUrl.searchParams.get("days") ?? "1");
+  const days = Number.isFinite(daysParam) ? Math.min(Math.max(Math.trunc(daysParam), 1), MAX_DAYS) : 1;
 
-  for (const [from, to] of pairs) {
-    const last = await prisma.exchangeRate.findFirst({
-      where: { baseCurrency: from, targetCurrency: to },
-      orderBy: { date: "desc" },
-    });
-    if (!last) continue;
-    await prisma.exchangeRate.upsert({
-      where: { date_baseCurrency_targetCurrency: { date: today, baseCurrency: from, targetCurrency: to } },
-      create: { date: today, baseCurrency: from, targetCurrency: to, rate: last.rate, source: last.source },
-      update: {},
-    });
-    updated++;
+  const result = await syncRates(days);
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, error: result.error ?? "Az árfolyam-frissítés nem sikerült" },
+      { status: 502 }
+    );
   }
-  return NextResponse.json({ ok: true, updated });
+
+  return NextResponse.json({
+    ok: true,
+    fetched: result.fetched,
+    upserted: result.upserted,
+    source: result.source,
+    missingDays: result.missingDays,
+    bootstrapped: result.bootstrapped,
+    carriedForward: result.carriedForward,
+    warnings: result.warnings,
+  });
 }
