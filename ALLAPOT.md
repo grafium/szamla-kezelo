@@ -22,6 +22,16 @@ Fejlesztés mindig a `main`-en; utána `git checkout vercel-demo && git merge or
 > és `outputFileTracingIncludes` blokkjait **és** a `main` biztonsági fejléc-blokkját
 > is meg kell tartani.
 
+Mindkét Vercel-projekt ugyanahhoz a repóhoz kapcsolódik, ezért minden ágra
+mindkettő indítana buildet. A keresztkombinációkat a `vercel.json`
+`ignoreCommand`-ja szűri (`scripts/vercel-ignore-build.sh`): a `vercel-demo` ág
+az éles projektben nem épül, mert ott a séma SQLite, a `DATABASE_URL` viszont
+Postgres — a build lefutna, de futásidőben minden oldal hibára fut. A szkript
+alapértelmezése az „építs", és csak nevesített kombinációra hagy ki buildet, így
+hiányzó környezeti változó nem tud éles buildet elnyomni. A `main` ág a demó
+projektben egyelőre továbbra is épül (és elhasal a `DIRECT_DATABASE_URL`
+hiányában) — ha ez zavar, egy hasonló ág+projekt feltétel a szkriptbe zárja.
+
 ## Környezeti változók (Vercel → Settings → Environment Variables)
 
 Élesben szükséges: `DATABASE_URL` (pooled Neon), `DIRECT_DATABASE_URL` (direct Neon),
