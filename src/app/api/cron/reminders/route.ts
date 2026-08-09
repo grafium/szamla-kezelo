@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
   // E-mail összefoglaló küldése (ConsoleSender, ha nincs RESEND_API_KEY)
   const digest = req.nextUrl.searchParams.get("digest");
   let emailsSent = 0;
+  const emailErrors: { email: string; error: string }[] = [];
   if (digest === "daily" || digest === "weekly") {
     const sender = getEmailSender();
     const today = startOfDay(new Date());
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
       const users = await prisma.user.findMany({
         where: { organizationId: org.id, deletedAt: null },
       });
+      let orgEmailsSent = 0;
       for (const user of users) {
         const prefs = parseNotificationPrefs(user.notificationPrefs);
         if (!prefs.email) continue;
@@ -45,12 +47,19 @@ export async function GET(req: NextRequest) {
         try {
           await sender.send(user.email, subject, html);
           emailsSent++;
+          orgEmailsSent++;
         } catch (err) {
-          console.error(`E-mail küldési hiba (${user.email}):`, err);
+          // A hiba okát a válasz is tartalmazza — különben a sikertelen küldés
+          // néma marad (pl. hitelesítetlen feladó domain a Resendnél).
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`E-mail küldési hiba (${user.email}):`, message);
+          emailErrors.push({ email: user.email, error: message.slice(0, 300) });
         }
       }
-      // A ma esedékes, e-mail csatornás emlékeztetők elküldöttnek jelölése
-      if (digest === "daily") {
+      // A ma esedékes, e-mail csatornás emlékeztetők elküldöttnek jelölése.
+      // Csak akkor, ha tényleg ment ki levél — különben az emlékeztető
+      // értesítés nélkül tűnne el, és a következő futás sem próbálná újra.
+      if (digest === "daily" && orgEmailsSent > 0) {
         await prisma.reminder.updateMany({
           where: {
             organizationId: org.id,
@@ -69,5 +78,6 @@ export async function GET(req: NextRequest) {
     occurrencesCreated: occurrences,
     remindersCreated: reminders,
     ...(digest ? { digest, emailsSent } : {}),
+    ...(emailErrors.length ? { emailErrors } : {}),
   });
 }
