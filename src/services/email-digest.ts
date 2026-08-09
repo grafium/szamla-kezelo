@@ -32,14 +32,28 @@ const TH_STYLE = 'style="text-align:left;padding:6px 10px;border-bottom:2px soli
 const TD_STYLE = 'style="padding:6px 10px;border-bottom:1px solid #eee"';
 const BIG_BADGE = '<span style="background:#fdecea;color:#c62828;border-radius:4px;padding:1px 6px;font-size:12px;margin-left:6px">nagy összeg</span>';
 
+/**
+ * A partner- és előfizetés-nevek felhasználói (illetve banki kivonatból származó)
+ * adatok, ezért HTML-be illesztés előtt escape-elni kell — különben egy
+ * "&lt;a href=…&gt;" alakú név tetszőleges tartalmat vihetne a kimenő levélbe.
+ */
+function esc(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function renderTable(rows: DigestRow[]): string {
   const body = rows
     .map(
       (r) => `<tr>
-  <td ${TD_STYLE}>${formatDate(r.date)}</td>
-  <td ${TD_STYLE}><a href="${r.href}" style="color:#1565c0;text-decoration:none">${r.label}</a>${r.big ? BIG_BADGE : ""}</td>
-  <td ${TD_STYLE}>${r.partner}</td>
-  <td ${TD_STYLE} align="right">${r.amount != null ? formatMoney(r.amount, r.currency) : "–"}</td>
+  <td ${TD_STYLE}>${esc(formatDate(r.date))}</td>
+  <td ${TD_STYLE}><a href="${esc(r.href)}" style="color:#1565c0;text-decoration:none">${esc(r.label)}</a>${r.big ? BIG_BADGE : ""}</td>
+  <td ${TD_STYLE}>${esc(r.partner)}</td>
+  <td ${TD_STYLE} align="right">${esc(r.amount != null ? formatMoney(r.amount, r.currency) : "–")}</td>
 </tr>`
     )
     .join("\n");
@@ -140,12 +154,12 @@ export async function buildDailyDigest(
   const remindersHtml = visibleReminders.length
     ? `<h3 style="font-family:Arial,Helvetica,sans-serif;font-size:15px;margin:20px 0 8px">Mai emlékeztetők</h3>
 <ul style="font-family:Arial,Helvetica,sans-serif;font-size:14px;margin:0;padding-left:20px">
-${visibleReminders.map((r) => `<li style="margin-bottom:4px">${r.message}</li>`).join("\n")}
+${visibleReminders.map((r) => `<li style="margin-bottom:4px">${esc(r.message)}</li>`).join("\n")}
 </ul>`
     : "";
 
   const html = `<div style="max-width:640px;margin:0 auto">
-<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:18px">Napi összefoglaló — ${org.name}</h2>
+<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:18px">Napi összefoglaló — ${esc(org.name)}</h2>
 <p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#555">
 A következő 7 nap várható terhelései (${rows.length} tétel, összesen ${formatMoney(total, base)}):
 </p>
@@ -250,13 +264,13 @@ export async function buildWeeklyPreview(
 
   const subject = `Heti előretekintés: ${rows.length} pénzügyi esemény a következő 7 napban`;
   const html = `<div style="max-width:640px;margin:0 auto">
-<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:18px">Heti előretekintés — ${org.name}</h2>
+<h2 style="font-family:Arial,Helvetica,sans-serif;font-size:18px">Heti előretekintés — ${esc(org.name)}</h2>
 <p style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#555">
 A következő 7 nap pénzügyi eseményei időrendben (${rows.length} tétel):
 </p>
 ${rows.length ? renderTable(rows) : '<p style="font-family:Arial,Helvetica,sans-serif;font-size:14px">Nincs esemény a következő 7 napban.</p>'}
 <p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;margin-top:20px">
-<a href="${APP_URL()}" style="color:#1565c0">Megnyitás a Számlakezelőben →</a>
+<a href="${esc(APP_URL())}" style="color:#1565c0">Megnyitás a Számlakezelőben →</a>
 </p>
 </div>`;
 

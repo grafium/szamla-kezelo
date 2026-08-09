@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addDays, startOfDay } from "date-fns";
 import { prisma } from "@/lib/prisma";
+import { isAuthorizedCron } from "@/lib/cron-auth";
 import { runReminderEngine } from "@/lib/reminders";
 import { generateAllOccurrences } from "@/lib/occurrences";
 import { getEmailSender } from "@/services/email";
@@ -12,8 +13,7 @@ import { parseNotificationPrefs } from "@/lib/notification-prefs";
 // E-mail összefoglalók: &digest=daily (napi) vagy &digest=weekly (heti előretekintés).
 
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get("token") ?? req.headers.get("authorization")?.replace("Bearer ", "");
-  if (!process.env.CRON_SECRET || token !== process.env.CRON_SECRET) {
+  if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "Érvénytelen token" }, { status: 401 });
   }
 

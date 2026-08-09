@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncRates, MAX_DAYS } from "@/services/rates/sync";
+import { isAuthorizedCron } from "@/lib/cron-auth";
 
 // Napi árfolyam-frissítés (cron). Az MNB SOAP-végpontjáról tölti az EUR→HUF és
 // USD→HUF árfolyamot, az ECB-ből az EUR→USD-t; MNB-hiba esetén mindent az
@@ -12,8 +13,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get("token") ?? req.headers.get("authorization")?.replace("Bearer ", "");
-  if (!process.env.CRON_SECRET || token !== process.env.CRON_SECRET) {
+  if (!isAuthorizedCron(req)) {
     return NextResponse.json({ error: "Érvénytelen token" }, { status: 401 });
   }
 
