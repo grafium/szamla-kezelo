@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Demó-mód: bejelentkezés nélküli használat + demó viselkedés (fordítási időben beégetve)
+  env: { DEMO_MODE: "1" },
   experimental: {
     serverActions: { bodySizeLimit: "10mb" },
   },
