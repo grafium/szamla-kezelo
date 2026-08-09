@@ -1,3 +1,4 @@
+import { addDays, endOfDay, startOfDay, subDays } from "date-fns";
 import type { FieldDef } from "./types";
 import {
   BILLING_CYCLE_LABELS, BILLING_CYCLE_MONTHS, CURRENCIES,
@@ -7,7 +8,9 @@ import {
 import { daysUntil } from "@/lib/format";
 
 // Szűrhető mezők entitásonként (7.3 fejezet). A computed mezők a lekérdezés után
-// JS-ben szűrődnek; a többiek Prisma where-ben.
+// JS-ben szűrődnek; a többiek Prisma where-ben. Ahol a számított mezőnek van
+// adatbázis-szintű megfelelője, ott `toWhere` is szerepel — így a lista lapozása
+// és összegzése a DB-ben maradhat (nem kell minden sort betölteni).
 
 const currencyOptions = CURRENCIES.map((c) => ({ value: c, label: c }));
 const record = (obj: Record<string, string>) =>
@@ -31,20 +34,61 @@ export const invoiceFields: FieldDef[] = [
   { key: "fulfillmentDate", label: "Teljesítés", type: "date", path: "fulfillmentDate" },
   { key: "dueDate", label: "Fizetési határidő", type: "date", path: "dueDate" },
   { key: "overdueDays", label: "Késedelem (nap)", type: "number",
-    computed: (r) => (r.status === "PAID" || r.status === "CANCELLED" ? 0 : Math.max(0, -daysUntil(r.dueDate))) },
+    computed: (r) => (r.status === "PAID" || r.status === "CANCELLED" ? 0 : Math.max(0, -daysUntil(r.dueDate))),
+    // A késedelem napokban = a határidő és a mai nap közti naptári napok száma
+    // nyitott számláknál, kifizetett/sztornó számláknál 0. Ezt naptári nap
+    // határokra fordítjuk, hogy a szűrés és a lapozás az adatbázisban maradjon.
+    toWhere: (cond) => {
+      const now = new Date();
+      const dayStart = (n: number) => startOfDay(subDays(now, n));
+      const dayEnd = (n: number) => endOfDay(subDays(now, n));
+      const open = { status: { notIn: ["PAID", "CANCELLED"] } };
+      const closed = { status: { in: ["PAID", "CANCELLED"] } };
+      const never = { id: { in: [] as string[] } };
+      // „legfeljebb N napos késés": a lezárt számlák (0 nap) is beleesnek,
+      // a nyitottak közül azok, amelyek határideje N-1 napnál nem régebbi.
+      const lessThan = (n: number) =>
+        n <= 0 ? never : { OR: [closed, { AND: [open, { dueDate: { gte: dayStart(n - 1) } }] }] };
+
+      const n = Number(cond.value);
+      if (cond.op === "between" && Array.isArray(cond.value)) {
+        const [a, b] = (cond.value as unknown[]).map(Number);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+        return { AND: [{ AND: [open, { dueDate: { lte: dayEnd(a) } }] }, lessThan(b + 1)] };
+      }
+      if (!Number.isFinite(n)) return null;
+      if (cond.op === "gte") return { AND: [open, { dueDate: { lte: dayEnd(n) } }] };
+      if (cond.op === "gt") return { AND: [open, { dueDate: { lte: dayEnd(n + 1) } }] };
+      if (cond.op === "lt") return lessThan(n);
+      if (cond.op === "lte") return lessThan(n + 1);
+      if (cond.op === "eq")
+        return n === 0
+          ? lessThan(1)
+          : { AND: [open, { dueDate: { gte: dayStart(n), lte: dayEnd(n) } }] };
+      return null;
+    } },
   { key: "category", label: "Kategória", type: "select", path: "categoryId", idPath: "categoryId" },
   { key: "tags", label: "Címkék", type: "tags", path: "tags" },
   { key: "paymentMethod", label: "Fizetési mód", type: "select", path: "paymentMethod", options: record(PAYMENT_METHOD_LABELS) },
   { key: "hasAttachment", label: "Van csatolmány", type: "boolean",
-    computed: (r) => (r.attachments?.length ?? 0) > 0 },
+    computed: (r) => (r.attachments?.length ?? 0) > 0,
+    toWhere: (cond) =>
+      cond.op === "isTrue" ? { attachments: { some: {} } }
+      : cond.op === "isFalse" ? { attachments: { none: {} } } : null },
   { key: "isMatched", label: "Párosítva banki tétellel", type: "boolean",
-    computed: (r) => (r.bankTransactions?.length ?? 0) > 0 },
+    computed: (r) => (r.bankTransactions?.length ?? 0) > 0,
+    toWhere: (cond) =>
+      cond.op === "isTrue" ? { bankTransactions: { some: {} } }
+      : cond.op === "isFalse" ? { bankTransactions: { none: {} } } : null },
   { key: "sourceType", label: "Forrás", type: "select", path: "sourceType", options: [
     { value: "MANUAL", label: "Kézi" }, { value: "UPLOAD", label: "Feltöltés" },
     { value: "EMAIL", label: "E-mail" }, { value: "API", label: "API" }] },
   { key: "ocrConfidence", label: "OCR megbízhatóság", type: "number", path: "ocrConfidence" },
   { key: "hasSubscription", label: "Előfizetéshez tartozik", type: "boolean",
-    computed: (r) => Boolean(r.subscriptionId) },
+    computed: (r) => Boolean(r.subscriptionId),
+    toWhere: (cond) =>
+      cond.op === "isTrue" ? { subscriptionId: { not: null } }
+      : cond.op === "isFalse" ? { subscriptionId: null } : null },
   { key: "notes", label: "Megjegyzés", type: "text", path: "notes" },
 ];
 
@@ -71,7 +115,25 @@ export const subscriptionFields: FieldDef[] = [
   { key: "billingCycle", label: "Számlázási ciklus", type: "select", path: "billingCycle", options: record(BILLING_CYCLE_LABELS) },
   { key: "nextBillingDate", label: "Következő terhelés", type: "date", path: "nextBillingDate" },
   { key: "daysUntilRenewal", label: "Hátralévő napok a megújulásig", type: "number",
-    computed: (r) => daysUntil(r.nextBillingDate) },
+    computed: (r) => daysUntil(r.nextBillingDate),
+    // A megújulásig hátralévő napok = nextBillingDate a mai naphoz képest,
+    // ezért közvetlenül dátum-összehasonlításra fordítható.
+    toWhere: (cond) => {
+      const at = (n: number) => endOfDay(addDays(new Date(), n));
+      const n = Number(cond.value);
+      if (cond.op === "between" && Array.isArray(cond.value)) {
+        const [a, b] = (cond.value as unknown[]).map(Number);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+        return { nextBillingDate: { gte: startOfDay(addDays(new Date(), a)), lte: at(b) } };
+      }
+      if (!Number.isFinite(n)) return null;
+      if (cond.op === "lte") return { nextBillingDate: { lte: at(n) } };
+      if (cond.op === "lt") return { nextBillingDate: { lt: startOfDay(addDays(new Date(), n)) } };
+      if (cond.op === "gte") return { nextBillingDate: { gte: startOfDay(addDays(new Date(), n)) } };
+      if (cond.op === "gt") return { nextBillingDate: { gt: at(n) } };
+      if (cond.op === "eq") return { nextBillingDate: { gte: startOfDay(addDays(new Date(), n)), lte: at(n) } };
+      return null;
+    } },
   { key: "cancellationDeadline", label: "Lemondási határidő", type: "date", path: "cancellationDeadline" },
   { key: "noticePeriodDays", label: "Felmondási idő (nap)", type: "number", path: "noticePeriodDays" },
   { key: "autoRenew", label: "Automatikus megújulás", type: "boolean", path: "autoRenew" },

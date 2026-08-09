@@ -16,34 +16,63 @@ export default async function ReportsPage() {
   const base = user.organization.baseCurrency as Currency;
   const yearStart = startOfYear(new Date());
 
-  const invoices = await prisma.invoice.findMany({
-    where: { organizationId: orgId, deletedAt: null, status: { notIn: ["CANCELLED", "DRAFT"] } },
-    include: { category: true, partner: true, payments: true },
-  });
-  const thisYear = invoices.filter((i) => i.issueDate >= yearStart);
+  // A riportok összesítései adatbázis-szintű csoportosításból épülnek — korábban
+  // a szervezet ÖSSZES számlája betöltődött (partnerrel, kategóriával, kifizetésekkel),
+  // ami néhány ezer számlánál másodperces válaszidőt okozott.
+  const yearScope = {
+    organizationId: orgId, deletedAt: null,
+    status: { notIn: ["CANCELLED", "DRAFT"] },
+    issueDate: { gte: yearStart },
+  };
+
+  const [catGroups, partnerGroups, vatRows, fxInvoices, categoryList, partnerList] = await Promise.all([
+    prisma.invoice.groupBy({ by: ["categoryId"], where: yearScope, _sum: { baseAmount: true } }),
+    prisma.invoice.groupBy({ by: ["partnerId"], where: yearScope, _sum: { baseAmount: true } }),
+    // Az ÁFA-összesítőnél a nettó/ÁFA a számla saját árfolyamával szorzódik,
+    // ezt SQL-összegzés nem tudja — de itt is elég a négy érintett mező.
+    prisma.invoice.findMany({
+      where: { ...yearScope, direction: "INCOMING" },
+      select: { vatRate: true, netAmount: true, vatAmount: true, exchangeRate: true },
+    }),
+    // Devizanyereség/-veszteség: csak a nem alapdevizás számlák kifizetései.
+    prisma.invoice.findMany({
+      where: {
+        organizationId: orgId, deletedAt: null,
+        status: { notIn: ["CANCELLED", "DRAFT"] },
+        NOT: { currency: base },
+      },
+      select: { exchangeRate: true, payments: { select: { amount: true, baseAmount: true } } },
+    }),
+    prisma.category.findMany({ where: { organizationId: orgId }, select: { id: true, name: true } }),
+    prisma.partner.findMany({ where: { organizationId: orgId }, select: { id: true, name: true } }),
+  ]);
+
+  const categoryNameById = new Map(categoryList.map((c) => [c.id, c.name]));
+  const partnerNameById = new Map(partnerList.map((p) => [p.id, p.name]));
 
   // Kiadás kategóriánként (idén)
-  const byCategory = new Map<string, number>();
-  for (const inv of thisYear) {
-    const key = inv.category?.name ?? "Egyéb";
-    byCategory.set(key, (byCategory.get(key) ?? 0) + inv.baseAmount);
-  }
-  const categoryRows = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
+  const categoryRows = catGroups
+    .map((g) => [
+      (g.categoryId && categoryNameById.get(g.categoryId)) || "Egyéb",
+      g._sum.baseAmount ?? 0,
+    ] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
   const categoryTotal = categoryRows.reduce((s, [, v]) => s + v, 0);
 
   // Kiadás partnerenként — top 20, Pareto
-  const byPartner = new Map<string, number>();
-  for (const inv of thisYear) {
-    const key = inv.partner?.name ?? "Ismeretlen";
-    byPartner.set(key, (byPartner.get(key) ?? 0) + inv.baseAmount);
-  }
-  const partnerRows = [...byPartner.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
-  const partnerTotal = [...byPartner.values()].reduce((s, v) => s + v, 0);
+  const allPartnerRows = partnerGroups
+    .map((g) => [
+      (g.partnerId && partnerNameById.get(g.partnerId)) || "Ismeretlen",
+      g._sum.baseAmount ?? 0,
+    ] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
+  const partnerRows = allPartnerRows.slice(0, 20);
+  const partnerTotal = allPartnerRows.reduce((s, [, v]) => s + v, 0);
   let cumulative = 0;
 
   // ÁFA-összesítő ÁFA-kulcsonként (idén, bejövő)
   const byVat = new Map<string, { net: number; vat: number }>();
-  for (const inv of thisYear.filter((i) => i.direction === "INCOMING")) {
+  for (const inv of vatRows) {
     const cur = byVat.get(inv.vatRate) ?? { net: 0, vat: 0 };
     const rate = inv.exchangeRate || 1;
     cur.net += Math.round(inv.netAmount * rate);
@@ -57,6 +86,7 @@ export default async function ReportsPage() {
   const [upcomingOcc, dueInvoices, rates] = await Promise.all([
     prisma.subscriptionOccurrence.findMany({
       where: { status: "UPCOMING", dueDate: { gte: now, lte: horizon }, subscription: { organizationId: orgId, deletedAt: null } },
+      select: { dueDate: true, expectedAmount: true, currency: true },
     }),
     prisma.invoice.findMany({
       where: {
@@ -64,6 +94,8 @@ export default async function ReportsPage() {
         status: { in: ["APPROVED", "AWAITING_APPROVAL", "PARTIALLY_PAID", "OVERDUE"] },
         dueDate: { lte: horizon },
       },
+      // A cash-flow előrejelzéshez csak a határidő és az alapdevizás összeg kell.
+      select: { dueDate: true, baseAmount: true },
     }),
     Promise.all([
       prisma.exchangeRate.findFirst({ where: { baseCurrency: "EUR", targetCurrency: "HUF" }, orderBy: { date: "desc" } }),
@@ -95,6 +127,7 @@ export default async function ReportsPage() {
       dueDate: { gte: subMonths(now, 12) },
       subscription: { organizationId: orgId },
     },
+    select: { dueDate: true, actualAmount: true, expectedAmount: true, currency: true },
   });
   const subByMonth = new Map<string, number>();
   for (let i = 11; i >= 0; i--) subByMonth.set(format(subMonths(now, i), "yyyy. MMM", { locale: hu }), 0);
@@ -105,7 +138,7 @@ export default async function ReportsPage() {
 
   // Devizanyereség/-veszteség: rögzítéskori vs. kifizetéskori árfolyam
   let fxDiff = 0;
-  for (const inv of invoices.filter((i) => i.currency !== base)) {
+  for (const inv of fxInvoices) {
     for (const p of inv.payments) {
       const bookedBase = Math.round((p.amount / 100) * inv.exchangeRate * 100);
       fxDiff += p.baseAmount - bookedBase;

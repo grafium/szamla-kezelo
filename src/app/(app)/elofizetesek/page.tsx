@@ -69,7 +69,12 @@ export default async function SubscriptionsPage({
     where: { organizationId: orgId, deletedAt: null, ...built.where },
     include: {
       partner: true, category: true,
-      occurrences: { orderBy: { dueDate: "desc" } },
+      // Csak a ténylegesen használt mezők (áremelés-jelzés és „eddig kifizetett"
+      // szűrő) — korábban a teljes előfordulás-sorok töltődtek be minden mezővel.
+      occurrences: {
+        orderBy: { dueDate: "desc" },
+        select: { id: true, dueDate: true, status: true, actualAmount: true, expectedAmount: true },
+      },
     },
     orderBy: { nextBillingDate: "asc" },
   });

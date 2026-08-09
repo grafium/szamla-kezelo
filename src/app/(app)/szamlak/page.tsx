@@ -21,6 +21,8 @@ import { NewInvoiceDrawer } from "@/components/forms/new-invoice-drawer";
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 50;
+/** Felső korlát arra a ritka esetre, amikor a szűrés JS-ben kell hogy fusson. */
+const JS_FILTER_LIMIT = 2000;
 
 const QUICK_FILTERS = [
   { label: "Lejárt", group: { logic: "AND" as const, items: [{ field: "status", op: "anyOf" as const, value: ["OVERDUE"] }] } },
@@ -70,22 +72,57 @@ export default async function InvoicesPage({
   );
 
   const where = { organizationId: orgId, deletedAt: null, ...built.where };
-  const all = await prisma.invoice.findMany({
-    where,
-    include: {
-      partner: true, category: true,
-      attachments: { select: { id: true } },
-      bankTransactions: { select: { id: true } },
-      payments: true,
-    },
-    orderBy: orderBy as any,
-  });
-  const filtered = applyComputed(all, built);
-  const total = filtered.length;
-  const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const totals = sumByCurrency(filtered.map((i) => ({ amount: i.grossAmount, currency: i.currency })));
-  const baseTotal = filtered.reduce((s, i) => s + i.baseAmount, 0);
+  // A listát alapesetben az adatbázis lapozza és összegzi — így 10 000 számlánál
+  // is csak egy oldalnyi sor kerül a memóriába. Ha a szűrő olyan számított mezőt
+  // tartalmaz, aminek nincs SQL-megfelelője (ritka), akkor kényszerűen minden
+  // sort be kell tölteni; ilyenkor a sorok száma korlátozott, és ezt jelezzük.
+  const needsJsFilter = built.computedPredicate !== null;
+
+  // A táblázat megjelenítéséhez elég a partner és a kategória neve.
+  const listInclude = { partner: true, category: true } as const;
+
+  let rows: any[];
+  let total: number;
+  let totals: Record<string, number>;
+  let baseTotal: number;
+  let truncated = false;
+
+  if (!needsJsFilter) {
+    const [pageRows, count, byCurrency, baseSum] = await Promise.all([
+      prisma.invoice.findMany({
+        where,
+        include: listInclude,
+        orderBy: orderBy as any,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      }),
+      prisma.invoice.count({ where }),
+      prisma.invoice.groupBy({ by: ["currency"], where, _sum: { grossAmount: true } }),
+      prisma.invoice.aggregate({ where, _sum: { baseAmount: true } }),
+    ]);
+    rows = pageRows;
+    total = count;
+    totals = Object.fromEntries(byCurrency.map((g) => [g.currency, g._sum.grossAmount ?? 0]));
+    baseTotal = baseSum._sum.baseAmount ?? 0;
+  } else {
+    const all = await prisma.invoice.findMany({
+      where,
+      include: {
+        ...listInclude,
+        attachments: { select: { id: true } },
+        bankTransactions: { select: { id: true } },
+      },
+      orderBy: orderBy as any,
+      take: JS_FILTER_LIMIT + 1,
+    });
+    truncated = all.length > JS_FILTER_LIMIT;
+    const filtered = applyComputed(all.slice(0, JS_FILTER_LIMIT), built);
+    total = filtered.length;
+    rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    totals = sumByCurrency(filtered.map((i) => ({ amount: i.grossAmount, currency: i.currency })));
+    baseTotal = filtered.reduce((s, i) => s + i.baseAmount, 0);
+  }
 
   const savedViews = await prisma.savedFilter.findMany({
     where: { organizationId: orgId, entityType: "invoices" },
@@ -189,7 +226,14 @@ export default async function InvoicesPage({
         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
           <CurrencyTotals totals={totals} baseTotal={baseTotal} baseCurrency={base} />
           <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-secondary)" }}>
-            <span>{total} számla</span>
+            <span>
+              {total} számla
+              {truncated && (
+                <span style={{ color: "var(--orange)" }}>
+                  {" "}· az összesítés az első {JS_FILTER_LIMIT} sorra vonatkozik
+                </span>
+              )}
+            </span>
             {page > 1 && <Link className="btn-text" href={qs({ oldal: String(page - 1) })}>← Előző</Link>}
             {page * PAGE_SIZE < total && <Link className="btn-text" href={qs({ oldal: String(page + 1) })}>Következő →</Link>}
           </div>

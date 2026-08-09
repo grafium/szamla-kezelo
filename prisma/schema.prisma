@@ -161,7 +161,9 @@ model Invoice {
 
   @@index([organizationId, status])
   @@index([organizationId, dueDate])
+  @@index([organizationId, issueDate])
   @@index([organizationId, partnerId, invoiceNumber])
+  @@index([subscriptionId])
 }
 
 model InvoiceLineItem {
@@ -361,6 +363,7 @@ model BankTransaction {
   @@index([bankStatementId])
   @@index([matchStatus])
   @@index([endToEndId])
+  @@index([matchedInvoiceId])
 }
 
 model Payment {
@@ -450,6 +453,9 @@ model Attachment {
   invoice    Invoice?  @relation(fields: [invoiceId], references: [id])
   purchaseId String?
   purchase   Purchase? @relation(fields: [purchaseId], references: [id])
+
+  @@index([invoiceId])
+  @@index([organizationId, inboxStatus])
 }
 
 model Reminder {
