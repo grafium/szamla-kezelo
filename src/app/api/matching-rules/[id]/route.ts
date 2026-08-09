@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 
 // Párosítási szabály törlése (szervezet-szintű jogosultsággal).
 
@@ -21,6 +22,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "DELETE",
       entityType: "MatchingRule",
       entityId: id,

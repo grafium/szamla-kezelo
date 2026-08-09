@@ -30,22 +30,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // ne lehessen megkerülni; a keresés viszont az eredeti címmel megy,
         // mert a tárolt e-mail címek kis-nagybetű-helyesen vannak mentve.
         const key = email.toLowerCase();
-        if (isRateLimited(key)) return null;
+        if (await isRateLimited(key)) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || user.deletedAt) {
           // Nem létező felhasználónál is futtatunk egy hash-összehasonlítást,
           // különben a válaszidőből kiderülne, mely e-mail címek léteznek.
           await compare(password, DUMMY_HASH);
-          registerFailure(key);
+          await registerFailure(key);
           return null;
         }
         const ok = await compare(password, user.passwordHash);
         if (!ok) {
-          registerFailure(key);
+          await registerFailure(key);
           return null;
         }
-        registerSuccess(key);
+        await registerSuccess(key);
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

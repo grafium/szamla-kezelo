@@ -24,10 +24,14 @@ fiókot. A napi cronok a `vercel.json`-ból jönnek.
    - `CRON_SECRET` — tetszőleges titok; a Vercel Cron ezzel hívja a
      `/api/cron/*` végpontokat (`Authorization: Bearer …`)
    - opcionális: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` — e-mail értesítésekhez
+   - ajánlott: `SETUP_TOKEN` — pl. `openssl rand -hex 16`. Ha be van állítva, a
+     `/setup` varázsló csak ezzel a kulccsal indítja el a telepítést, tehát a
+     frissen élesített, még üres rendszert nem tudja idegen beállítani.
 4. **Első deploy** — a build lefuttatja: `prisma db push` → `next build`
    (a seed demó adat nélkül, üresen hagyja az adatbázist).
 5. **Első megnyitás** — az app a `/setup` varázslóra irányít: add meg a
-   cégnevet, az alapdevizát és az admin fiókot, majd jelentkezz be.
+   cégnevet, az alapdevizát és az admin fiókot (és a telepítési kulcsot, ha
+   beállítottad a `SETUP_TOKEN`-t), majd jelentkezz be.
 
 A `DEMO_MODE` és a `SEED_DEMO` kapcsolók kizárólag a demóhoz/fejlesztéshez
 valók — élesben ne állítsd be őket.

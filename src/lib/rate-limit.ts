@@ -1,53 +1,99 @@
-// Egyszerű, memóriában tartott sebességkorlátozó a bejelentkezéshez.
+import { prisma } from "@/lib/prisma";
+
+// Sebességkorlátozó a bejelentkezéshez, adatbázis-alapú számlálóval.
 //
-// Korlát: serverless környezetben (Vercel) példányonként külön memória van,
-// így ez nem globális korlát — a próbálkozások költségét viszont érdemben
-// megemeli, és nem igényel adatbázis-migrációt. Szigorúbb, elosztott
-// korlátozáshoz Redis/Upstash vagy egy LoginAttempt tábla kell.
+// Serverless környezetben (Vercel) minden példánynak külön memóriája van, ezért
+// egy memóriabeli Map nem ad globális korlátot: elég sok párhuzamos példány
+// mellett a próbálkozások száma többszörözhető. A számláló ezért a
+// LoginAttempt táblában él, így a korlát a példányok között is érvényes.
+//
+// A számláló nem eshet a bejelentkezés útjába: ha az adatbázis-művelet hibára
+// fut, a hívások „nyitva hagynak" (a belépés folytatódik), és a szerverlogba
+// figyelmeztetés kerül. Egy adatbázis-hiba így nem zárja ki mindenkit.
 
-interface Bucket {
-  count: number;
-  resetAt: number;
-  blockedUntil: number;
-}
-
-const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 15 * 60 * 1000; // 15 perc
 const MAX_ATTEMPTS = 8;
 const BLOCK_MS = 15 * 60 * 1000;
-const MAX_KEYS = 5000; // memóriakorlát: a lejárt kulcsokat takarítjuk
 
-function sweep(now: number) {
-  if (buckets.size < MAX_KEYS) return;
-  for (const [key, b] of buckets) {
-    if (b.resetAt < now && b.blockedUntil < now) buckets.delete(key);
-  }
+function warn(operation: string, err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  console.warn(`Sebességkorlát (${operation}) nem elérhető: ${message}`);
 }
 
 /** true, ha a kulcs (pl. e-mail cím) jelenleg zárolva van. */
-export function isRateLimited(key: string): boolean {
-  const b = buckets.get(key);
-  return !!b && b.blockedUntil > Date.now();
+export async function isRateLimited(key: string): Promise<boolean> {
+  try {
+    const row = await prisma.loginAttempt.findUnique({ where: { key } });
+    return !!row?.blockedUntil && row.blockedUntil.getTime() > Date.now();
+  } catch (err) {
+    warn("ellenőrzés", err);
+    return false;
+  }
 }
 
 /** Sikertelen próbálkozás rögzítése; a limit elérésekor zárol. */
-export function registerFailure(key: string): void {
-  const now = Date.now();
-  sweep(now);
-  const b = buckets.get(key);
-  if (!b || b.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS, blockedUntil: 0 });
-    return;
-  }
-  b.count++;
-  if (b.count >= MAX_ATTEMPTS) {
-    b.blockedUntil = now + BLOCK_MS;
-    b.count = 0;
-    b.resetAt = now + WINDOW_MS;
+export async function registerFailure(key: string): Promise<void> {
+  const now = new Date();
+  try {
+    // Az increment atomi, így párhuzamos kérések sem írják felül egymást.
+    const row = await prisma.loginAttempt.upsert({
+      where: { key },
+      create: { key, count: 1, windowEndsAt: new Date(now.getTime() + WINDOW_MS) },
+      update: { count: { increment: 1 } },
+    });
+
+    if (row.windowEndsAt.getTime() <= now.getTime()) {
+      // A korábbi ablak lejárt — új ablak indul ezzel a próbálkozással.
+      await prisma.loginAttempt.update({
+        where: { key },
+        data: {
+          count: 1,
+          windowEndsAt: new Date(now.getTime() + WINDOW_MS),
+          blockedUntil: null,
+        },
+      });
+      return;
+    }
+
+    if (row.count >= MAX_ATTEMPTS) {
+      await prisma.loginAttempt.update({
+        where: { key },
+        data: {
+          count: 0,
+          windowEndsAt: new Date(now.getTime() + WINDOW_MS),
+          blockedUntil: new Date(now.getTime() + BLOCK_MS),
+        },
+      });
+    }
+  } catch (err) {
+    warn("rögzítés", err);
   }
 }
 
 /** Sikeres belépés — a számláló nullázódik. */
-export function registerSuccess(key: string): void {
-  buckets.delete(key);
+export async function registerSuccess(key: string): Promise<void> {
+  try {
+    await prisma.loginAttempt.delete({ where: { key } });
+  } catch {
+    // Nem volt sor (P2025) — nincs mit törölni.
+  }
+}
+
+/**
+ * A lejárt számlálók takarítása. A napi cron hívja, hogy a tábla ne nőjön
+ * korlátlanul a sikertelen próbálkozások kulcsaival.
+ */
+export async function purgeExpiredAttempts(now = new Date()): Promise<number> {
+  try {
+    const { count } = await prisma.loginAttempt.deleteMany({
+      where: {
+        windowEndsAt: { lt: now },
+        OR: [{ blockedUntil: null }, { blockedUntil: { lt: now } }],
+      },
+    });
+    return count;
+  } catch (err) {
+    warn("takarítás", err);
+    return 0;
+  }
 }

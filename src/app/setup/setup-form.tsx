@@ -8,12 +8,17 @@ import { CURRENCIES } from "@/lib/constants";
 // Első-indítási űrlap: POST /api/setup → siker esetén /login?uj=1.
 
 type FieldErrors = Partial<Record<
-  "orgName" | "taxNumber" | "baseCurrency" | "adminName" | "adminEmail" | "password" | "password2",
+  "orgName" | "taxNumber" | "baseCurrency" | "adminName" | "adminEmail" | "password" | "password2" | "token",
   string
 >>;
 
-export function SetupForm() {
+/**
+ * tokenRequired: a szerveren be van állítva a SETUP_TOKEN, tehát a telepítés
+ * csak a kulcs megadásával indul el.
+ */
+export function SetupForm({ tokenRequired = false }: { tokenRequired?: boolean }) {
   const router = useRouter();
+  const [token, setToken] = useState("");
   const [orgName, setOrgName] = useState("");
   const [taxNumber, setTaxNumber] = useState("");
   const [baseCurrency, setBaseCurrency] = useState("HUF");
@@ -38,6 +43,7 @@ export function SetupForm() {
     }
     if (password.length < 8) errs.password = "A jelszó legalább 8 karakter legyen";
     if (password2 !== password) errs.password2 = "A két jelszó nem egyezik";
+    if (tokenRequired && !token.trim()) errs.token = "A telepítési kulcs kötelező";
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
@@ -53,6 +59,7 @@ export function SetupForm() {
         adminName: adminName.trim(),
         adminEmail: adminEmail.trim(),
         password,
+        ...(tokenRequired ? { token: token.trim() } : {}),
       }),
     });
     if (res.ok) {
@@ -66,6 +73,18 @@ export function SetupForm() {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3" noValidate>
+      {tokenRequired && (
+        <Field label="Telepítési kulcs *" error={errors.token}>
+          <input
+            className="input"
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="a SETUP_TOKEN értéke"
+            autoComplete="off"
+          />
+        </Field>
+      )}
       <Field label="Cégnév *" error={errors.orgName}>
         <input className="input" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder="Példa Kft." />
       </Field>

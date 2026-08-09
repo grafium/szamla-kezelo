@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 
 // Kézi párosítás megerősítése: banki tétel ↔ számla (vagy figyelmen kívül hagyás),
 // illetve felosztás: egy banki tétel több számla között ("split").
@@ -155,6 +156,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: `MATCH_${action.toUpperCase()}`,
       entityType: "BankTransaction",
       entityId: transactionId,

@@ -7,6 +7,7 @@ import { generateAllOccurrences } from "@/lib/occurrences";
 import { getEmailSender } from "@/services/email";
 import { buildDailyDigest, buildWeeklyPreview } from "@/services/email-digest";
 import { parseNotificationPrefs } from "@/lib/notification-prefs";
+import { purgeExpiredAttempts } from "@/lib/rate-limit";
 
 // Napi cron: előfordulás-generálás + emlékeztető-motor.
 // Hívás: GET /api/cron/reminders?token=<CRON_SECRET>
@@ -85,10 +86,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // A lejárt bejelentkezési számlálók takarítása, hogy a tábla ne nőjön
+  // korlátlanul a próbált e-mail címek kulcsaival.
+  const attemptsPurged = await purgeExpiredAttempts();
+
   return NextResponse.json({
     ok: true,
     occurrencesCreated: occurrences,
     remindersCreated: reminders,
+    attemptsPurged,
     ...(digest ? { digest, emailsSent } : {}),
     ...(emailErrors.length ? { emailErrors } : {}),
   });

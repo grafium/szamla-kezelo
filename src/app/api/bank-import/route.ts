@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { dedupKey } from "@/services/bank-import/csv";
 import { scoreMatch, AUTO_MATCH_THRESHOLD, type InvoiceLike } from "@/lib/matching";
 
@@ -206,6 +207,7 @@ export async function POST(req: NextRequest) {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "IMPORT",
       entityType: "BankStatement",
       entityId: statement.id,

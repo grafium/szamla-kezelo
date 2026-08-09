@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { setupTokenRequired } from "@/lib/setup-token";
 import { SetupForm } from "./setup-form";
 
 // Első-indítási varázsló: csak teljesen üres adatbázison érhető el.
@@ -18,7 +19,7 @@ export default async function SetupPage() {
             Első indítás — hozd létre a szervezetet és az admin fiókot
           </p>
         </div>
-        <SetupForm />
+        <SetupForm tokenRequired={setupTokenRequired()} />
       </div>
     </main>
   );

@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { syncRates } from "@/services/rates/sync";
 
 // Kézi árfolyam-frissítés a beállítások oldalról (session-auth, OWNER/ADMIN).
@@ -9,7 +10,7 @@ import { syncRates } from "@/services/rates/sync";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const user = await currentUserOrDemo();
   if (!user) return NextResponse.json({ error: "Bejelentkezés szükséges" }, { status: 401 });
   if (user.role !== "OWNER" && user.role !== "ADMIN") {
@@ -28,6 +29,7 @@ export async function POST() {
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "UPDATE",
       entityType: "ExchangeRate",
       entityId: "sync",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { clientIp } from "@/lib/audit";
 import { bankAccountUpdateSchema } from "@/lib/validation";
 
 // Bankszámla módosítása és (puha) törlése.
@@ -45,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "UPDATE",
       entityType: "BankAccount",
       entityId: id,
@@ -87,6 +89,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     data: {
       organizationId: user.organizationId,
       userId: user.id,
+      ipAddress: clientIp(req),
       action: "DELETE",
       entityType: "BankAccount",
       entityId: id,
