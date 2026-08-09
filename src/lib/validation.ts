@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CURRENCIES, INVOICE_STATUSES, PAYMENT_METHODS, VAT_RATES, BILLING_CYCLES } from "./constants";
+import { CURRENCIES, INVOICE_STATUSES, PAYMENT_METHODS, VAT_RATES, BILLING_CYCLES, PALETTE } from "./constants";
 
 // Magyar sajátosságok (11. fejezet)
 
@@ -91,3 +91,46 @@ export const partnerSchema = z.object({
   tags: z.array(z.string()).default([]),
   notes: z.string().optional().nullable(),
 });
+
+/**
+ * Bankszámla. A számlaszámot/IBAN-t lazán validáljuk: sok bank eltérő
+ * tagolással adja meg, a lényeg, hogy a formátum ránézésre helyes legyen.
+ */
+export const bankAccountSchema = z.object({
+  name: z.string().trim().min(1, "A név kötelező").max(120),
+  bankName: z.string().trim().max(120).optional().nullable().or(z.literal("")),
+  accountNumber: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, ""))
+    .refine(
+      (v) => v === "" || /^[\d-]{17,26}$/.test(v),
+      "Érvénytelen bankszámlaszám — 16 vagy 24 számjegy, kötőjelekkel tagolva (pl. 11773016-11111018)"
+    )
+    .optional()
+    .nullable(),
+  iban: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+    .refine(
+      (v) => v === "" || /^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(v),
+      "Érvénytelen IBAN — pl. HU42117730161111101800000000"
+    )
+    .optional()
+    .nullable(),
+  swift: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, "").toUpperCase())
+    .refine((v) => v === "" || /^[A-Z0-9]{8,11}$/.test(v), "Érvénytelen SWIFT/BIC kód — pl. OTPVHUHB")
+    .optional()
+    .nullable(),
+  currency: currencySchema,
+  openingBalance: z
+    .number()
+    .int("A nyitó egyenleget fillérben/centben, egészként tároljuk")
+    .default(0),
+  color: z.enum(PALETTE).optional().nullable().or(z.literal("")),
+  isActive: z.boolean().default(true),
+});
+
+/** Módosításnál minden mező opcionális. */
+export const bankAccountUpdateSchema = bankAccountSchema.partial();

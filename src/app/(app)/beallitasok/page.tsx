@@ -2,13 +2,16 @@ import { currentUserOrDemo, requireUser, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Topbar } from "@/components/topbar";
 import { Badge, Card, EmptyState } from "@/components/ui";
-import { formatMoney } from "@/lib/money";
+import { formatMoney, formatNumberHu } from "@/lib/money";
+import { formatDate } from "@/lib/format";
 import { BANK_TEMPLATES } from "@/services/bank-import/templates";
-import type { Currency } from "@/lib/constants";
+import { getLatestRates } from "@/services/rates/sync";
 import { MatchingRulesManager } from "./matching-rules";
 import { NotificationPrefsForm } from "./notification-prefs";
 import { PasswordForm } from "./password-form";
 import { ExportCard } from "./export-card";
+import { BankAccountsManager } from "./bank-accounts-card";
+import { RatesCard } from "./rates-card";
 import { parseNotificationPrefs } from "@/lib/notification-prefs";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +31,7 @@ export default async function SettingsPage() {
     await signOut({ redirectTo: "/login" });
   }
 
-  const [users, accounts, categories, rules, partners] = await Promise.all([
+  const [users, accounts, categories, rules, partners, latestRates] = await Promise.all([
     prisma.user.findMany({ where: { organizationId: org.id, deletedAt: null } }),
     prisma.bankAccount.findMany({ where: { organizationId: org.id, deletedAt: null } }),
     prisma.category.findMany({
@@ -42,6 +45,7 @@ export default async function SettingsPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    getLatestRates(),
   ]);
 
   const partnerNameById = new Map(partners.map((p) => [p.id, p.name]));
@@ -107,18 +111,32 @@ export default async function SettingsPage() {
         </Card>
 
         <Card title="Bankszámlák">
-          <div className="flex flex-col gap-2">
-            {accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ background: `var(--${a.color ?? "gray"})` }} />
-                  <span className="font-medium text-[14px]">{a.name}</span>
-                  <span className="text-[12px]" style={{ color: "var(--text-tertiary)" }}>{a.bankName}</span>
-                </span>
-                <span className="num text-[14px]">{formatMoney(a.currentBalance, a.currency as Currency)}</span>
-              </div>
-            ))}
-          </div>
+          <BankAccountsManager
+            accounts={accounts.map((a) => ({
+              id: a.id,
+              name: a.name,
+              bankName: a.bankName,
+              accountNumber: a.accountNumber,
+              iban: a.iban,
+              swift: a.swift,
+              currency: a.currency,
+              openingBalance: a.openingBalance,
+              currentBalance: a.currentBalance,
+              color: a.color,
+              isActive: a.isActive,
+            }))}
+          />
+        </Card>
+
+        <Card title="Devizaárfolyamok">
+          <RatesCard
+            rates={latestRates.map((r) => ({
+              pair: `${r.baseCurrency} → ${r.targetCurrency}`,
+              rate: r.rate == null ? null : formatNumberHu(r.rate, r.targetCurrency === "HUF" ? 2 : 4),
+              date: r.date ? formatDate(r.date) : null,
+              source: r.source,
+            }))}
+          />
         </Card>
 
         <Card title="Kategóriák">
