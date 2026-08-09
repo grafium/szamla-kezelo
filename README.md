@@ -4,17 +4,17 @@ Teljes körű pénzügyi nyilvántartó kisvállalkozásoknak: beérkező száml
 kivonatok, egyszeri vásárlások és ismétlődő előfizetések kezelése három
 devizában (HUF / EUR / USD), Notion-stílusú felülettel, teljes egészében magyarul.
 
-## Deploy Vercel-re (publikus link)
+## Élesítés
 
-A repó elő van készítve: a build maga hozza létre a sémát és tölti be a demó
-adatokat (a seed idempotens — meglévő adatot nem ír felül), a napi cronok pedig
-a `vercel.json`-ból jönnek.
+Az éles telepítés üres adatbázissal indul (demó adat nem kerül bele), és az
+első megnyitáskor a `/setup` varázsló hozza létre a szervezetet és az admin
+fiókot. A napi cronok a `vercel.json`-ból jönnek.
 
 1. **Adatbázis:** hozz létre egy ingyenes Postgres-t a [neon.tech](https://neon.tech)-en
    (vagy a Vercel Storage → Neon integrációval). Két kapcsolati stringre lesz
    szükség: a *pooled* és a *direct* URL-re.
 2. **Vercel:** [vercel.com/new](https://vercel.com/new) → importáld a
-   `grafium/szamla-kezelo` repót.
+   `grafium/szamla-kezelo` repó **main** ágát.
 3. **Környezeti változók** a projekt beállításainál:
    - `DATABASE_URL` — a pooled Neon URL
    - `DIRECT_DATABASE_URL` — a direct (nem poolozott) Neon URL
@@ -23,19 +23,28 @@ a `vercel.json`-ból jönnek.
    - `AUTH_TRUST_HOST` — `true`
    - `CRON_SECRET` — tetszőleges titok; a Vercel Cron ezzel hívja a
      `/api/cron/*` végpontokat (`Authorization: Bearer …`)
-4. **Deploy** — a build lefuttatja: `prisma db push` → seed → `next build`.
+   - opcionális: `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL` — e-mail értesítésekhez
+4. **Első deploy** — a build lefuttatja: `prisma db push` → `next build`
+   (a seed demó adat nélkül, üresen hagyja az adatbázist).
+5. **Első megnyitás** — az app a `/setup` varázslóra irányít: add meg a
+   cégnevet, az alapdevizát és az admin fiókot, majd jelentkezz be.
 
-Demó belépés: `demo@grafium.hu` / `demo1234`.
+A `DEMO_MODE` és a `SEED_DEMO` kapcsolók kizárólag a demóhoz/fejlesztéshez
+valók — élesben ne állítsd be őket.
 
 ## Gyors indítás lokálisan
 
 ```bash
 npm install
-cp .env.example .env   # írd be a saját Neon (vagy helyi Postgres) URL-jeidet
-npm run db:push        # séma létrehozása
-npm run db:seed        # demó adatok betöltése
-npm run dev            # http://localhost:3000
+cp .env.example .env         # írd be a saját Neon (vagy helyi Postgres) URL-jeidet
+npm run db:push              # séma létrehozása
+SEED_DEMO=1 npm run db:seed  # demó adatok betöltése (nélküle üres marad)
+npm run dev                  # http://localhost:3000
 ```
+
+Demó belépés (seedelt adatbázisnál): `demo@grafium.hu` / `demo1234`.
+Bejelentkezés nélküli fejlesztéshez tedd a `.env`-be: `DEMO_MODE="1"` —
+ilyenkor session hiányában az első (demó) felhasználóval fut az app.
 
 Ha nincs kéznél Postgres, SQLite-tal is futtatható: a `prisma/schema.prisma`-ban
 állítsd a providert `"sqlite"`-ra, töröld a `directUrl` sort, és a `.env`-ben

@@ -1,4 +1,4 @@
-import { currentUserOrDemo } from "@/auth";
+import { currentUserOrDemo, requireUser, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Topbar } from "@/components/topbar";
 import { Badge, Card, EmptyState } from "@/components/ui";
@@ -7,6 +7,8 @@ import { BANK_TEMPLATES } from "@/services/bank-import/templates";
 import type { Currency } from "@/lib/constants";
 import { MatchingRulesManager } from "./matching-rules";
 import { NotificationPrefsForm } from "./notification-prefs";
+import { PasswordForm } from "./password-form";
+import { ExportCard } from "./export-card";
 import { parseNotificationPrefs } from "@/lib/notification-prefs";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +20,13 @@ const ROLE_LABELS: Record<string, string> = {
 export default async function SettingsPage() {
   const user = await currentUserOrDemo();
   if (!user) return <EmptyState text="Futtasd a seed szkriptet: npm run db:seed" />;
+  const sessionUser = await requireUser(); // valódi session (demó-fallback nélkül)
   const org = user.organization;
+
+  async function logout() {
+    "use server";
+    await signOut({ redirectTo: "/login" });
+  }
 
   const [users, accounts, categories, rules, partners] = await Promise.all([
     prisma.user.findMany({ where: { organizationId: org.id, deletedAt: null } }),
@@ -57,6 +65,31 @@ export default async function SettingsPage() {
             <dt style={{ color: "var(--text-secondary)" }}>E-mail beküldés</dt>
             <dd><code className="text-[13px]">szamla-{org.inboundEmailToken ?? "…"}@app.hu</code></dd>
           </dl>
+        </Card>
+
+        <Card title="Fiók">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <div className="font-medium text-[14px]">{(sessionUser ?? user).name}</div>
+              <div className="text-[12px]" style={{ color: "var(--text-tertiary)" }}>
+                {(sessionUser ?? user).email}
+                {!sessionUser && " (demó-mód, bejelentkezés nélkül)"}
+              </div>
+            </div>
+            <form action={logout}>
+              <button type="submit" className="btn-secondary">Kijelentkezés</button>
+            </form>
+          </div>
+        </Card>
+
+        {sessionUser && (
+          <Card title="Jelszó módosítása">
+            <PasswordForm />
+          </Card>
+        )}
+
+        <Card title="Adatexport">
+          <ExportCard />
         </Card>
 
         <Card title="Felhasználók és jogosultságok">
