@@ -1,9 +1,16 @@
+import { redirect } from "next/navigation";
 import { MobileNav, Sidebar } from "@/components/sidebar";
 import { currentUserOrDemo } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUserOrDemo();
+  if (!user) {
+    // Üres adatbázis → első-indítási varázsló; különben kötelező bejelentkezés.
+    const orgCount = await prisma.organization.count();
+    if (orgCount === 0) redirect("/setup");
+    redirect("/login");
+  }
   let inboxCount = 0;
   let reminderCount = 0;
   let pinnedViews: { name: string; href: string }[] = [];

@@ -4,9 +4,10 @@ import { signIn } from "@/auth";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ hiba?: string }>;
+  searchParams: Promise<{ hiba?: string; uj?: string }>;
 }) {
-  const { hiba } = await searchParams;
+  const { hiba, uj } = await searchParams;
+  const demoMode = process.env.DEMO_MODE === "1";
 
   async function login(formData: FormData) {
     "use server";
@@ -36,20 +37,27 @@ export default async function LoginPage({
             Hibás e-mail cím vagy jelszó
           </p>
         )}
+        {uj && (
+          <p className="badge" style={{ background: "var(--green-bg)", color: "var(--green)" }}>
+            A fiók létrejött, jelentkezz be
+          </p>
+        )}
         <form action={login} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
             <span className="label-upper">E-mail</span>
-            <input name="email" type="email" required className="input" placeholder="demo@grafium.hu" />
+            <input name="email" type="email" required className="input" placeholder={demoMode ? "demo@grafium.hu" : "nev@ceged.hu"} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="label-upper">Jelszó</span>
-            <input name="password" type="password" required className="input" placeholder="demo1234" />
+            <input name="password" type="password" required className="input" placeholder={demoMode ? "demo1234" : "••••••••"} />
           </label>
           <button type="submit" className="btn-primary justify-center">Bejelentkezés</button>
         </form>
-        <p className="text-[12px]" style={{ color: "var(--text-tertiary)" }}>
-          Demó fiók: demo@grafium.hu / demo1234
-        </p>
+        {demoMode && (
+          <p className="text-[12px]" style={{ color: "var(--text-tertiary)" }}>
+            Demó fiók: demo@grafium.hu / demo1234
+          </p>
+        )}
       </div>
     </main>
   );

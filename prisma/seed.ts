@@ -53,6 +53,11 @@ function grossToParts(vatRate: string, gross: number) {
 
 // ---------- main ----------
 async function main() {
+  // Éles indulás üres adatbázissal: demó adatot csak kifejezett kérésre töltünk.
+  if (process.env.SEED_DEMO !== "1") {
+    console.log("Demó seed kihagyva (SEED_DEMO != 1)");
+    return;
+  }
   // Idempotencia: ha már van adat (pl. korábbi Vercel-build seedelt), nem fut újra.
   const existing = await prisma.organization.count();
   if (existing > 0) {

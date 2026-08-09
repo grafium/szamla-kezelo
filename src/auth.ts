@@ -50,9 +50,13 @@ export async function requireUser() {
   return user;
 }
 
-/** Fejlesztési kényelem: ha nincs auth-session, az első (demo) felhasználóval dolgozunk. */
+/**
+ * A bejelentkezett felhasználó; DEMO_MODE="1" esetén (bejelentkezés nélküli
+ * demó) session hiányában az első (demo) felhasználóval dolgozunk.
+ */
 export async function currentUserOrDemo() {
   const user = await requireUser();
   if (user) return user;
+  if (process.env.DEMO_MODE !== "1") return null;
   return prisma.user.findFirst({ include: { organization: true } });
 }
