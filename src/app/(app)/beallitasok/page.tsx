@@ -6,6 +6,8 @@ import { formatMoney } from "@/lib/money";
 import { BANK_TEMPLATES } from "@/services/bank-import/templates";
 import type { Currency } from "@/lib/constants";
 import { MatchingRulesManager } from "./matching-rules";
+import { NotificationPrefsForm } from "./notification-prefs";
+import { parseNotificationPrefs } from "@/lib/notification-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +124,14 @@ export default async function SettingsPage() {
               partnerName: r.partnerId ? partnerNameById.get(r.partnerId) ?? null : null,
               categoryName: r.categoryId ? categoryNameById.get(r.categoryId) ?? null : null,
             }))}
+            partners={partners}
+            categories={allCategories}
+          />
+        </Card>
+
+        <Card title="Értesítési beállítások">
+          <NotificationPrefsForm
+            initial={parseNotificationPrefs(user.notificationPrefs)}
             partners={partners}
             categories={allCategories}
           />

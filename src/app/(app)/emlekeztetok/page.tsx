@@ -4,21 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { Topbar } from "@/components/topbar";
 import { Badge, Card, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/format";
-import { REMINDER_TYPE_LABELS } from "@/lib/constants";
+import { REMINDER_TYPE_COLORS, REMINDER_TYPE_LABELS } from "@/lib/constants";
 import { ReminderActions } from "./actions";
 
 export const dynamic = "force-dynamic";
-
-const TYPE_COLORS: Record<string, string> = {
-  SUBSCRIPTION_RENEWAL: "blue",
-  INVOICE_DUE: "orange",
-  INVOICE_OVERDUE: "red",
-  CANCELLATION_DEADLINE: "purple",
-  TRIAL_ENDING: "yellow",
-  BUDGET_EXCEEDED: "red",
-  PRICE_INCREASE: "red",
-  WARRANTY_EXPIRING: "gray",
-};
 
 export default async function RemindersPage() {
   const user = await currentUserOrDemo();
@@ -55,7 +44,7 @@ export default async function RemindersPage() {
                   <div key={r.id}
                     className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-2 py-2 rounded-md hover:bg-[var(--bg-hover)]">
                     <div className="flex items-center gap-3 min-w-0">
-                      <Badge color={TYPE_COLORS[r.type] ?? "gray"}>
+                      <Badge color={REMINDER_TYPE_COLORS[r.type] ?? "gray"}>
                         {REMINDER_TYPE_LABELS[r.type] ?? r.type}
                       </Badge>
                       <span className="text-[14px] truncate">{r.message}</span>
