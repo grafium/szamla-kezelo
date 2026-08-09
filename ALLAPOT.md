@@ -24,13 +24,18 @@ Fejlesztés mindig a `main`-en; utána `git checkout vercel-demo && git merge or
 
 Mindkét Vercel-projekt ugyanahhoz a repóhoz kapcsolódik, ezért minden ágra
 mindkettő indítana buildet. A keresztkombinációkat a `vercel.json`
-`ignoreCommand`-ja szűri (`scripts/vercel-ignore-build.sh`): a `vercel-demo` ág
-az éles projektben nem épül, mert ott a séma SQLite, a `DATABASE_URL` viszont
-Postgres — a build lefutna, de futásidőben minden oldal hibára fut. A szkript
-alapértelmezése az „építs", és csak nevesített kombinációra hagy ki buildet, így
-hiányzó környezeti változó nem tud éles buildet elnyomni. A `main` ág a demó
-projektben egyelőre továbbra is épül (és elhasal a `DIRECT_DATABASE_URL`
-hiányában) — ha ez zavar, egy hasonló ág+projekt feltétel a szkriptbe zárja.
+`ignoreCommand`-ja szűri (`scripts/vercel-ignore-build.sh`) — mindkét irányban:
+
+- a `vercel-demo` ág az **éles** projektben nem épül (a séma SQLite, a
+  `DATABASE_URL` viszont Postgres: a build lefutna, de futásidőben minden oldal
+  hibára fut);
+- a `main` ág a **demó** projektben nem épül (Postgres séma, de ott nincs
+  adatbázis-változó: `P1012: DIRECT_DATABASE_URL`).
+
+A szkript alapértelmezése az „építs", és csak e két nevesített kombinációra hagy
+ki buildet, így hiányzó `VERCEL_PROJECT_ID`/`VERCEL_GIT_COMMIT_REF` nem tud éles
+buildet elnyomni. Bármely más ág mindkét projektben épül, mint eddig.
+Ellenőrzés: a kihagyás a Vercelen `CANCELED` állapotú deployként jelenik meg.
 
 ## Környezeti változók (Vercel → Settings → Environment Variables)
 
