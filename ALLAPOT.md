@@ -2,6 +2,8 @@
 
 Ez a dokumentum a projekt aktuális állapotát rögzíti, hogy egy új munkamenet
 azonnal folytatni tudja. Utolsó frissítés: 2026. 08. 09. (2. munkamenet vége).
+A munkamenetek történetét (mi történt, milyen döntések születtek és miért)
+a `NAPLO.md` rögzíti.
 
 ## Hol tartunk
 
